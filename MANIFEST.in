@@ -1,0 +1,23 @@
+# General info
+include LICENSE
+include *.rst
+
+# Control and setup helpers
+include ganground/_version.py
+include versioneer.py
+
+# Exclude development helpers
+exclude tox.ini
+exclude *-requirements.txt
+
+# Include src, tests, docs
+recursive-include docs *.rst *.py *.gitkeep
+include docs/requirements.txt
+prune docs/build
+prune docs/src/reference
+prune docs/src/_themes
+recursive-include cortex_XOR_GAN *.py
+recursive-include cortex *
+recursive-include ganground *.py
+recursive-include tests *.py
+include tests/requirements.txt

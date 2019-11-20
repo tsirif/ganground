@@ -1,0 +1,482 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+import pytest
+
+import numpy as np
+import torch as T
+
+from ganground import kernels
+from ganground.kernels import (mmd2, mmd2_gener, cross_mean_kernel_wrap,
+                               MMD2_OBJ_TYPES, RBF_KERNELS)
+
+
+def torch_assert_alltrue(cond):
+    assert(T.equal(cond, T.ones_like(cond, dtype=T.uint8)))
+
+
+@pytest.fixture(params=[2**0, 2**5, 2**10, 2**12])
+def X_Y_samples(device, request):
+    """Arrays of various sizes which contain samples from two distributions.
+
+    The distributions are supported on the real line.
+    X's are sampled from a gaussian(`trainable_float_param`, 0.5).
+    Y's are sampled from a 1D-dirac measure centered at -1.
+    X's have trainable mean and std gaussian parameters, single tensor floats
+    which require gradient.
+
+    """
+    mean = T.tensor(3., device=device, dtype=T.float64).requires_grad_()
+    std = T.tensor(0.5, device=device, dtype=T.float64).requires_grad_()
+    size = request.param
+    X = std * T.randn(size, device=device, dtype=T.float64) + mean
+    Y = T.zeros_like(X) - 1.
+    return X, Y, X.detach().cpu().numpy(), Y.detach().cpu().numpy(), mean, std
+
+
+@pytest.fixture()
+def X_Y_samples2(device):
+    mean = T.tensor(-0.5, device=device, dtype=T.float64).requires_grad_()
+    std = T.tensor(0.3, device=device, dtype=T.float64).requires_grad_()
+    size = 2**6
+    X = std * T.randn(size, device=device, dtype=T.float64) + mean
+    Y = std * T.randn(size, device=device, dtype=T.float64) + 0.5
+    return X, Y.detach(), X.detach().cpu().numpy(), Y.detach().cpu().numpy(), mean, std
+
+
+class TestPairwiseDot(object):
+
+    def test_pairwise_dot_diff_args_forward(self, X_Y_samples):
+        X, Y, X_np, Y_np, mean, std = X_Y_samples
+        size = len(X)
+
+        XY = kernels._pairwise_dot(X, Y)
+
+        XY_np = np.sum(X_np.reshape(size, 1, -1) * Y_np.reshape(1, size, -1),
+                       axis=-1)
+        np.testing.assert_allclose(XY.detach().cpu().numpy(), XY_np,
+                                   rtol=1e-06, atol=1e-12)
+
+    def test_pairwise_dot_diff_args_backward(self, X_Y_samples):
+        X, Y, X_np, Y_np, mean, std = X_Y_samples
+
+        XY = kernels._pairwise_dot(X, Y)
+
+        XY.mean().backward()
+        np.testing.assert_allclose(mean.grad.detach().cpu().numpy(), -1,
+                                   rtol=1e-06, atol=1e-12)
+
+    def test_pairwise_dot_same_args_forward(self, X_Y_samples):
+        X, Y, X_np, Y_np, mean, std = X_Y_samples
+        size = len(X)
+
+        XX = kernels._pairwise_dot(X, X)
+
+        XX_np = np.sum(X_np.reshape(size, 1, -1) * X_np.reshape(1, size, -1),
+                       axis=-1)
+        np.testing.assert_allclose(XX.detach().cpu().numpy(), XX_np,
+                                   rtol=1e-06, atol=1e-12)
+
+    def test_pairwise_dot_same_args_backward(self, X_Y_samples):
+        X, Y, X_np, Y_np, mean, std = X_Y_samples
+
+        XX = kernels._pairwise_dot(X, X)
+
+        XX.mean().backward()
+        torch_assert_alltrue(mean.grad > 0)
+
+
+@pytest.mark.parametrize("p", [0.5, 1, 2, 3])
+class TestPairwiseDist(object):
+
+    def test_pairwise_dist_diff_args_forward(self, X_Y_samples, p):
+        X, Y, X_np, Y_np, mean, std = X_Y_samples
+        size = len(X)
+
+        XY = kernels._pairwise_dist(X, Y, p=p)
+
+        XY_np = np.sum(np.power(np.abs(X_np.reshape(size, 1, -1) - Y_np.reshape(1, size, -1)), p),
+                       axis=-1) ** (1./p)
+        np.testing.assert_allclose(XY.detach().cpu().numpy(), XY_np,
+                                   rtol=1e-06, atol=1e-12)
+
+    def test_pairwise_dist_diff_args_backward(self, X_Y_samples, p):
+        X, Y, X_np, Y_np, mean, std = X_Y_samples
+
+        XY = kernels._pairwise_dist(X, Y, p=p)
+
+        XY.mean().backward()
+        np.testing.assert_allclose(mean.grad.detach().cpu().numpy(), 1,
+                                   rtol=1e-06, atol=1e-12)
+
+    def test_pairwise_dist_same_args_forward(self, X_Y_samples, p):
+        X, Y, X_np, Y_np, mean, std = X_Y_samples
+        size = len(X)
+
+        XX = kernels._pairwise_dist(X, X, p=p)
+
+        XX_np = np.sum(np.power(np.abs(X_np.reshape(size, 1, -1) - X_np.reshape(1, size, -1)), p),
+                       axis=-1) ** (1./p)
+        XX_np = XX_np[np.triu_indices_from(XX_np, k=1)]
+        np.testing.assert_allclose(XX.detach().cpu().numpy(), XX_np,
+                                   rtol=1e-06, atol=1e-12)
+
+    def test_pairwise_dist_same_args_backward(self, X_Y_samples, p):
+        X, Y, X_np, Y_np, mean, std = X_Y_samples
+
+        XX = kernels._pairwise_dist(X, X, p=p)
+
+        XX.mean().backward()
+        np.testing.assert_allclose(mean.grad.detach().cpu().numpy(), 0,
+                                   rtol=1e-06, atol=1e-12)
+
+
+@pytest.mark.parametrize("p", [0.5, 1, 2, 3])
+class TestPairwisePowDist(object):
+
+    def test_pairwise_pow_dist_diff_args_forward(self, X_Y_samples, p):
+        X, Y, X_np, Y_np, mean, std = X_Y_samples
+        size = len(X)
+
+        XY = kernels._pairwise_pow_dist(X, Y, p=p)
+
+        XY_np = np.sum(np.power(np.abs(X_np.reshape(size, 1, -1) - Y_np.reshape(1, size, -1)), p),
+                       axis=-1)
+        np.testing.assert_allclose(XY.detach().cpu().numpy(), XY_np,
+                                   rtol=1e-06, atol=1e-12)
+
+    def test_pairwise_pow_dist_diff_args_backward(self, X_Y_samples, p):
+        X, Y, X_np, Y_np, mean, std = X_Y_samples
+
+        XY = kernels._pairwise_pow_dist(X, Y, p=p)
+
+        XY.mean().backward()
+        torch_assert_alltrue(mean.grad > 0)
+
+    def test_pairwise_pow_dist_same_args_forward(self, X_Y_samples, p):
+        X, Y, X_np, Y_np, mean, std = X_Y_samples
+        size = len(X)
+
+        XX = kernels._pairwise_pow_dist(X, X, p=p)
+
+        XX_np = np.sum(np.power(np.abs(X_np.reshape(size, 1, -1) - X_np.reshape(1, size, -1)), p),
+                       axis=-1)
+        XX_np = XX_np[np.triu_indices_from(XX_np, k=1)]
+        np.testing.assert_allclose(XX.detach().cpu().numpy(), XX_np,
+                                   rtol=1e-06, atol=1e-12)
+
+    def test_pairwise_pow_dist_same_args_backward(self, X_Y_samples, p):
+        X, Y, X_np, Y_np, mean, std = X_Y_samples
+
+        XX = kernels._pairwise_pow_dist(X, X, p=p)
+
+        XX.mean().backward()
+        np.testing.assert_allclose(mean.grad.detach().cpu().numpy(), 0,
+                                   rtol=1e-06, atol=1e-12)
+
+
+class TestKernelFunctions(object):
+
+    def test_same_kernel_forward(self, X_Y_samples2):
+        X, Y, X_np, Y_np, mean, std = X_Y_samples2
+        XY = kernels.same_kernel(X, Y, eps=0)
+        px = X.detach().view(-1).sigmoid()
+        py = Y.view(-1).sigmoid()
+        XY_exp = T.log(T.ger(px, py) + T.ger(1 - px, 1 - py))
+        T.testing.assert_allclose(XY, XY_exp,
+                                  rtol=1e-06, atol=1e-12)
+
+    def test_same_kernel_register(self):
+        assert('same_kernel' not in RBF_KERNELS)
+        assert('mmd2_same' in MMD2_OBJ_TYPES)
+
+    def test_negdiff_kernel_forward(self, X_Y_samples2):
+        X, Y, X_np, Y_np, mean, std = X_Y_samples2
+        XY = kernels.negdiff_kernel(X, Y, eps=0)
+        px = X.detach().view(-1).sigmoid()
+        py = Y.view(-1).sigmoid()
+        XY_exp = - T.log(T.ger(px, 1 - py) + T.ger(1 - px, py))
+        T.testing.assert_allclose(XY, XY_exp,
+                                  rtol=1e-06, atol=1e-12)
+
+    def test_negdiff_kernel_register(self):
+        assert('negdiff_kernel' not in RBF_KERNELS)
+        assert('mmd2_negdiff' in MMD2_OBJ_TYPES)
+
+    def test_gaussian_kernel_forward(self, X_Y_samples2):
+        X, Y, X_np, Y_np, mean, std = X_Y_samples2
+        XY = kernels.gaussian_kernel(X, Y)
+        a = T.norm(X.detach().view(64, 1, -1) - Y.view(1, 64, -1), p=2, dim=-1) ** 2
+        XY_exp = T.exp(- a / 2)
+        T.testing.assert_allclose(XY, XY_exp,
+                                  rtol=1e-06, atol=1e-12)
+
+    def test_gaussian_kernel_register(self):
+        assert('gaussian_kernel' in RBF_KERNELS)
+        assert('mmd2_gaussian' in MMD2_OBJ_TYPES)
+
+    def test_exp_kernel_forward(self, X_Y_samples2):
+        X, Y, X_np, Y_np, mean, std = X_Y_samples2
+        XY = kernels.exp_kernel(X, Y)
+        a = T.norm(X.detach().view(64, 1, -1) - Y.view(1, 64, -1), p=2, dim=-1)
+        XY_exp = T.exp(- a)
+        T.testing.assert_allclose(XY, XY_exp,
+                                  rtol=1e-06, atol=1e-12)
+
+    def test_exp_kernel_register(self):
+        assert('exp_kernel' in RBF_KERNELS)
+        assert('mmd2_exp' in MMD2_OBJ_TYPES)
+
+    def test_laplacian_kernel_forward(self, X_Y_samples2):
+        X, Y, X_np, Y_np, mean, std = X_Y_samples2
+        XY = kernels.laplacian_kernel(X, Y)
+        a = T.norm(X.detach().view(64, 1, -1) - Y.view(1, 64, -1), p=1, dim=-1)
+        XY_exp = T.exp(- a)
+        T.testing.assert_allclose(XY, XY_exp,
+                                  rtol=1e-06, atol=1e-12)
+
+    def test_laplacian_kernel_register(self):
+        assert('laplacian_kernel' in RBF_KERNELS)
+        assert('mmd2_laplacian' in MMD2_OBJ_TYPES)
+
+    def test_exp2_kernel_forward(self, X_Y_samples2):
+        X, Y, X_np, Y_np, mean, std = X_Y_samples2
+        XY = kernels.exp2_kernel(X, Y)
+        a = T.sum(X.detach().view(64, 1, -1) * Y.view(1, 64, -1), dim=-1)
+        XY_exp = T.exp(a)
+        T.testing.assert_allclose(XY, XY_exp,
+                                  rtol=1e-06, atol=1e-12)
+
+    def test_exp2_kernel_register(self):
+        assert('exp2_kernel' not in RBF_KERNELS)
+        assert('mmd2_exp2' in MMD2_OBJ_TYPES)
+
+    def test_lin_kernel_forward(self, X_Y_samples2):
+        X, Y, X_np, Y_np, mean, std = X_Y_samples2
+        XY = kernels.lin_kernel(X, Y)
+        XY_exp = T.sum(X.detach().view(64, 1, -1) * Y.view(1, 64, -1), dim=-1)
+        T.testing.assert_allclose(XY, XY_exp,
+                                  rtol=1e-06, atol=1e-12)
+
+    def test_normlin_kernel_forward(self, X_Y_samples2):
+        X, Y, X_np, Y_np, mean, std = X_Y_samples2
+        XY = kernels.normlin_kernel(X, Y)
+        XY_exp = T.sum(X.detach().view(64, 1, -1) * Y.view(1, 64, -1), dim=-1)
+        a = T.sqrt(X.detach().pow(2) + 1).view(64, 1)
+        b = T.sqrt(Y.pow(2) + 1).view(1, 64)
+        T.testing.assert_allclose(XY, XY_exp / (a * b),
+                                  rtol=1e-06, atol=1e-12)
+
+    def test_normlin_kernel_register(self):
+        assert('normlin_kernel' not in RBF_KERNELS)
+        assert('mmd2_normlin' in MMD2_OBJ_TYPES)
+
+    def test_normlin2_kernel_forward(self, X_Y_samples2):
+        X, Y, X_np, Y_np, mean, std = X_Y_samples2
+        XY = kernels.normlin2_kernel(X, Y)
+        a = T.sum(X.detach().view(64, 1, -1) * Y.view(1, 64, -1), dim=-1)
+        b = T.sqrt(T.norm(X.detach().view(64, 1, -1) - Y.view(1, 64, -1), dim=-1)**2 + 1)
+        XY_exp = a / b
+        T.testing.assert_allclose(XY, XY_exp,
+                                  rtol=1e-06, atol=1e-12)
+
+    def test_normlin2_kernel_register(self):
+        assert('normlin2_kernel' not in RBF_KERNELS)
+        assert('mmd2_normlin2' in MMD2_OBJ_TYPES)
+
+    def test_poly_kernel_forward(self, X_Y_samples2):
+        X, Y, X_np, Y_np, mean, std = X_Y_samples2
+        XY = kernels.poly_kernel(X, Y, a=2, c=1)
+        a = T.sum(X.detach().view(64, 1, -1) * Y.view(1, 64, -1), dim=-1)
+        XY_exp = (2 * a + 1) ** 2
+        T.testing.assert_allclose(XY, XY_exp,
+                                  rtol=1e-06, atol=1e-12)
+
+    def test_poly_kernel_register(self):
+        assert('poly_kernel' not in RBF_KERNELS)
+        assert('mmd2_poly' in MMD2_OBJ_TYPES)
+
+    def test_tanh_kernel_forward(self, X_Y_samples2):
+        X, Y, X_np, Y_np, mean, std = X_Y_samples2
+        XY = kernels.tanh_kernel(X, Y)
+        a = T.sum(X.detach().view(64, 1, -1) * Y.view(1, 64, -1), dim=-1)
+        XY_exp = T.tanh(a)
+        T.testing.assert_allclose(XY, XY_exp,
+                                  rtol=1e-06, atol=1e-12)
+
+    def test_tanh_kernel_register(self):
+        assert('tanh_kernel' not in RBF_KERNELS)
+        assert('mmd2_tanh' in MMD2_OBJ_TYPES)
+
+    def test_imq_kernel_forward(self, X_Y_samples2):
+        X, Y, X_np, Y_np, mean, std = X_Y_samples2
+        XY = kernels.imq_kernel(X, Y, sigma=2, d=4)
+        a = T.norm(X.detach().view(64, 1, -1) - Y.view(1, 64, -1), dim=-1) ** 2
+        XY_exp = (a / 4 + 1) ** -2
+        T.testing.assert_allclose(XY, XY_exp, rtol=1e-06, atol=1e-12)
+
+    def test_imq_kernel_register(self):
+        assert('imq_kernel' in RBF_KERNELS)
+        assert('mmd2_imq' in MMD2_OBJ_TYPES)
+
+    @pytest.mark.parametrize("kernel", ["same_kernel", "negdiff_kernel",
+                                        "exp_kernel", "exp2_kernel",
+                                        "laplacian_kernel",
+                                        "gaussian_kernel",
+                                        "imq_kernel",
+                                        "normlin_kernel", "normlin2_kernel",
+                                        "poly_kernel", "lin_kernel",
+                                        "tanh_kernel"])
+    def test_kernel_backward(self, X_Y_samples2, kernel):
+        X, Y, X_np, Y_np, mean, std = X_Y_samples2
+        XY = kernels.exp2_kernel(X, Y)
+        XY.mean().backward()
+        torch_assert_alltrue(mean.grad > 0)
+
+
+class TestKernelWrapper(object):
+
+    def test_default(self, X_Y_samples2):
+        X, Y, X_np, Y_np, mean, std = X_Y_samples2
+        fn = kernels.cross_mean_kernel_wrap(kernels.gaussian_kernel)
+        XX, YY, XY = fn(X, Y, sigma=2)
+
+        XX_exp = kernels.gaussian_kernel(X, X, sigma=2)
+        YY_exp = kernels.gaussian_kernel(Y, Y, sigma=2)
+        XY_exp = kernels.gaussian_kernel(X, Y, sigma=2)
+
+        T.testing.assert_allclose(XX, XX_exp, rtol=1e-06, atol=1e-12)
+        T.testing.assert_allclose(YY, YY_exp, rtol=1e-06, atol=1e-12)
+        T.testing.assert_allclose(XY, XY_exp, rtol=1e-06, atol=1e-12)
+
+    def test_no_try_pdist_calc_cxx(self, X_Y_samples2):
+        X, Y, X_np, Y_np, mean, std = X_Y_samples2
+        fn = kernels.cross_mean_kernel_wrap(kernels.gaussian_kernel)
+        XX, YY, XY = fn(X, Y, try_pdist=False, calc_cxx=True, sigma=2)
+
+        XX_exp = kernels.gaussian_kernel(X, X, sigma=2)
+        YY_exp = kernels.gaussian_kernel(Y, Y, sigma=2)
+        XY_exp = kernels.gaussian_kernel(X, Y, sigma=2)
+
+        T.testing.assert_allclose(XX, XX_exp, rtol=1e-06, atol=1e-12)
+        T.testing.assert_allclose(YY, YY_exp, rtol=1e-06, atol=1e-12)
+        T.testing.assert_allclose(XY, XY_exp, rtol=1e-06, atol=1e-12)
+
+    def test_no_try_pdist_no_calc_cxx(self, X_Y_samples2):
+        X, Y, X_np, Y_np, mean, std = X_Y_samples2
+        fn = kernels.cross_mean_kernel_wrap(kernels.gaussian_kernel)
+        XX, YY, XY = fn(X, Y, try_pdist=False, calc_cxx=False, sigma=2)
+
+        YY_exp = kernels.gaussian_kernel(Y, Y, sigma=2)
+        XY_exp = kernels.gaussian_kernel(X, Y, sigma=2)
+
+        assert(XX is None)
+        T.testing.assert_allclose(YY, YY_exp, rtol=1e-06, atol=1e-12)
+        T.testing.assert_allclose(XY, XY_exp, rtol=1e-06, atol=1e-12)
+
+    def test_try_pdist_calc_cxx(self, X_Y_samples2):
+        X, Y, X_np, Y_np, mean, std = X_Y_samples2
+        fn = kernels.cross_mean_kernel_wrap(kernels.gaussian_kernel)
+        XX, YY, XY = fn(X, Y, try_pdist=True, calc_cxx=True, sigma=2)
+
+        XX_exp = kernels.gaussian_kernel(X, X, sigma=2)
+        YY_exp = kernels.gaussian_kernel(Y, Y, sigma=2)
+        XY_exp = kernels.gaussian_kernel(X, Y, sigma=2)
+
+        T.testing.assert_allclose(XX, XX_exp.mean(), rtol=1e-06, atol=1e-12)
+        T.testing.assert_allclose(YY, YY_exp.mean(), rtol=1e-06, atol=1e-12)
+        T.testing.assert_allclose(XY, XY_exp.mean(), rtol=1e-06, atol=1e-12)
+
+    def test_try_pdist_no_calc_cxx(self, X_Y_samples2):
+        X, Y, X_np, Y_np, mean, std = X_Y_samples2
+        fn = kernels.cross_mean_kernel_wrap(kernels.gaussian_kernel)
+        XX, YY, XY = fn(X, Y, try_pdist=True, calc_cxx=False, sigma=2)
+
+        YY_exp = kernels.gaussian_kernel(Y, Y, sigma=2)
+        XY_exp = kernels.gaussian_kernel(X, Y, sigma=2)
+
+        assert(XX is None)
+        T.testing.assert_allclose(YY, YY_exp.mean(), rtol=1e-06, atol=1e-12)
+        T.testing.assert_allclose(XY, XY_exp.mean(), rtol=1e-06, atol=1e-12)
+
+    @pytest.mark.parametrize("try_pdist", [True, False])
+    @pytest.mark.parametrize("calc_cxx", [True, False])
+    def test_kernel_wrapper_backward(self, X_Y_samples2, try_pdist, calc_cxx):
+        X, Y, X_np, Y_np, mean, std = X_Y_samples2
+        fn = kernels.cross_mean_kernel_wrap(kernels.gaussian_kernel)
+        XX, YY, XY = fn(Y, X, try_pdist=try_pdist, calc_cxx=calc_cxx, sigma=2)
+        if XX is not None:
+            res = XX.mean() + YY.mean() - 2 * XY.mean()
+        else:
+            res = YY.mean() - 2 * XY.mean()
+        res.backward()
+        torch_assert_alltrue(mean.grad < 0)
+
+
+def _mat(device=None):
+    res = T.tensor([[6, 2], [3, 4]], requires_grad=True,
+                   device=device, dtype=T.float64)
+    assert(len(res.shape) == 2)
+    return res
+
+
+def _vec(device=None):
+    res = T.tensor([1, 4], requires_grad=True,
+                   device=device, dtype=T.float64)
+    assert(len(res.shape) == 1)
+    return res
+
+
+def _sca(device=None):
+    res = T.tensor(2.5, requires_grad=True,
+                   device=device, dtype=T.float64)
+    assert(len(res.shape) == 0)
+    return res
+
+
+class TestMMD2(object):
+
+    def test_PPk_is_None(self, device):
+        res = mmd2(None, _mat(device), _vec(device))
+        assert(res == -2.5)
+        res.backward()
+
+    def test_QQk_is_None(self, device):
+        with pytest.raises(AssertionError):
+            mmd2(_mat(device), None, _mat(device))
+
+    def test_PQk_is_None(self, device):
+        with pytest.raises(AssertionError):
+            mmd2(_mat(device), _mat(device), None)
+
+    @pytest.mark.parametrize("xx", ['mat', 'vec', 'sca'])
+    @pytest.mark.parametrize("yy", ['mat', 'vec', 'sca'])
+    @pytest.mark.parametrize("xy", ['mat', 'vec', 'sca'])
+    def test_mmd2_various_ranked_inputs(self, device, xx, yy, xy):
+        inmap = {'mat': _mat, 'vec': _vec, 'sca': _sca}
+        derivs = {'mat': [[0, 0.5], [0.5, 0]], 'vec': [0.5, 0.5], 'sca': 1}
+        derivs_xy = {'mat': [[-0.5, -0.5], [-0.5, -0.5]], 'vec': [-1, -1], 'sca': -2}
+        mmd2_in = inmap[xx](device), inmap[yy](device), inmap[xy](device)
+        print(mmd2_in)
+        res = mmd2(*mmd2_in)
+        if xy == 'mat':
+            assert(res == -2.5)
+        else:
+            assert(res == 0)
+
+        res.backward()
+        T.testing.assert_allclose(mmd2_in[0].grad,
+                                  T.tensor(derivs[xx], device=device, dtype=T.float64),
+                                  rtol=1e-06, atol=1e-12)
+        T.testing.assert_allclose(mmd2_in[1].grad,
+                                  T.tensor(derivs[yy], device=device, dtype=T.float64),
+                                  rtol=1e-06, atol=1e-12)
+        T.testing.assert_allclose(mmd2_in[2].grad,
+                                  T.tensor(derivs_xy[xy], device=device, dtype=T.float64),
+                                  rtol=1e-06, atol=1e-12)
+
+    def test_mmd2_gener(self, device):
+        res = mmd2_gener(_mat(device), _mat(device))
+        res_exp = mmd2(None, _mat(device), _mat(device))
+        assert(res == res_exp)
+        res.backward()
