@@ -23,8 +23,7 @@ install_requires = [
     'numpy >= 1.10',
     'scipy >= 1.0',
     # 'torch >= 1.1',
-    'torchvision >= 0.3',
-    'tensorboard >= 1.13, < 2.0',
+    #  'torchvision >= 0.3',
     'nauka',
     'scikit-learn',
     'imageio',
@@ -33,6 +32,9 @@ install_requires = [
 
 packages = [
     'ganground',
+    'ganground.data',
+    'ganground.exp',
+    'ganground.metric',
     ]
 
 setup_args = dict(
@@ -52,7 +54,7 @@ setup_args = dict(
         'console_scripts': [
             ],
         },
-    python_requires='>=3.7.4',
+    python_requires='>=3.6',
     install_requires=install_requires,
     tests_require=['pytest>=4.1.1'],
     setup_requires=['setuptools'],
