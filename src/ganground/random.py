@@ -149,7 +149,10 @@ class TorchPRNG(AbstractPRNG):
 
 
 class TorchCudaPRNG(TorchPRNG):
-    CUDA = TorchPRNG.torch.cuda.current_device() >= 0
+    try:
+        CUDA = TorchPRNG.torch.cuda.current_device() >= 0
+    except RuntimeError:
+        CUDA = False
 
     def seed(self, password):
         if self.CUDA is False:
