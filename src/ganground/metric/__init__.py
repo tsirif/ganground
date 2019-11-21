@@ -15,11 +15,10 @@ from ganground.optim import Trainable
 
 class Metric(Trainable):
 
-    def __init__(self, P, Q, critic=None, log='', **opt_options):
-        super(Metric, self).__init__(critic, **opt_options)
+    def __init__(self, name, P, Q, critic=None, **opt_options):
+        super(Metric, self).__init__(name, critic, **opt_options)
         self.P = P
         self.Q = Q
-        self.log = log
 
 ################################################################################
 #                             Low level interface                              #
@@ -52,9 +51,7 @@ class Metric(Trainable):
             assert(opt is not None)  # Calling `separate` implies a critic model
             metric = self.estimate(obj_type, **obj_kwargs)
             loss = - metric  # Separation means "maximization" of the metric
-            if self.log:
-                # TODO Log loss  (visualise module)
-                pass
+            # TODO Log loss using `name`  (visualise module)
             loss.backward()
 
     def minimize(self, obj_type, **obj_kwargs):
@@ -65,7 +62,5 @@ class Metric(Trainable):
             self.requires_grad_(False)
             loss = self.loss(obj_type,
                              calcpp=calcpp, calcqq=calcqq, **obj_kwargs)
-            if self.log:
-                # TODO Log loss  (visualise module)
-                pass
+            # TODO Log loss using `name`  (visualise module)
             loss.backward()

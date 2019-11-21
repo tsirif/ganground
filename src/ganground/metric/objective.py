@@ -8,6 +8,7 @@ r"""
    :synopsis: Define objective types.
 
 """
+# TODO assertions regarding dimensions of samples in `objectives.py`
 from abc import abstractmethod
 import math
 

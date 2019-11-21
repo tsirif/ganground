@@ -17,6 +17,7 @@ from abc import (abstractmethod, abstractproperty)
 from contextlib import (contextmanager, ExitStack)
 import hashlib
 
+from ganground.state import State
 from ganground.utils import (AbstractSingletonType, SingletonFactory)
 
 
@@ -149,13 +150,9 @@ class TorchPRNG(AbstractPRNG):
 
 
 class TorchCudaPRNG(TorchPRNG):
-    try:
-        CUDA = TorchPRNG.torch.cuda.current_device() >= 0
-    except RuntimeError:
-        CUDA = False
 
     def seed(self, password):
-        if self.CUDA is False:
+        if not State().is_cuda:
             return
         seed = self.get_random_state(password, salt="torch.cuda")
         self.torch.cuda.manual_seed(seed)
@@ -163,13 +160,13 @@ class TorchCudaPRNG(TorchPRNG):
 
     @property
     def state(self):
-        if self.CUDA is False:
+        if not State().is_cuda:
             return
         return self.torch.cuda.get_prng_state()
 
     @state.setter
     def state(self, state_):
-        if self.CUDA is False:
+        if not State().is_cuda:
             return
         self.torch.cuda.set_prng_state(state_)
 
