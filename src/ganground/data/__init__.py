@@ -19,7 +19,10 @@ from ganground.random import PRNG
 
 
 # global variable indicating whether CUDA is being used
-CUDA = torch.cuda.current_device() >= 0
+try:
+    CUDA = torch.cuda.current_device() >= 0
+except RuntimeError:
+    CUDA = False
 
 
 def _worker_init_fn(worker_id):
