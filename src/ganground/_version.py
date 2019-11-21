@@ -42,8 +42,8 @@ def get_config():
     cfg.VCS = "git"
     cfg.style = "pep440-post"
     cfg.tag_prefix = ""
-    cfg.parentdir_prefix = "gan-thesis-"
-    cfg.versionfile_source = "ganground/_version.py"
+    cfg.parentdir_prefix = "ganground-"
+    cfg.versionfile_source = "src/ganground/_version.py"
     cfg.verbose = False
     return cfg
 
