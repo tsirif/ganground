@@ -51,7 +51,7 @@ setup_args = dict(
         'console_scripts': [
             ],
         },
-    python_requires='>=3.7.4',
+    python_requires='>=3.6',
     install_requires=install_requires,
     tests_require=['pytest>=4.1.1'],
     setup_requires=['setuptools'],
