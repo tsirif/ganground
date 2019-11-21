@@ -13,6 +13,7 @@ import copy
 from nauka.utils.torch.optim import fromSpec as build_optimizer
 import torch
 
+from ganground.nn import Module
 from ganground.state import State
 
 
@@ -57,7 +58,8 @@ class Trainable(object):
                 update_average_model(self.trainable._avg_model,
                                      self.trainable._model, ema)
 
-    def __init__(self, name, model, ema=0, spec=None, **opt_options):
+    def __init__(self, name: str, model: Module,
+                 ema=0, spec=None, **opt_options):
         self.name = name
         self._model = model
         self._avg_model = model

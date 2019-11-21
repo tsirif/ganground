@@ -40,9 +40,6 @@ def prepare_splits(splits, N):
 
 
 class AbstractDataset(object, metaclass=ABCMeta):
-    """
-    TODO Create SourceMeasure
-    """
 
     def __init__(self, root, num_workers=1, download=False, load=True,
                  splits=(1,), **options):

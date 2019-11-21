@@ -10,7 +10,9 @@ r"""
 """
 from abc import (ABCMeta, abstractmethod)
 
+from ganground.data import AbstractDataset
 from ganground.optim import Trainable
+from ganground.nn import Module
 
 
 class Measure(object, metaclass=ABCMeta):
@@ -20,32 +22,35 @@ class Measure(object, metaclass=ABCMeta):
         pass
 
 
-class SourceMeasure(Measure):
-    # TODO This is to describe a prior source of entropy
-    # like a Gaussian distribution (by default it could support all
-    # distributions in PyTorch).
-    def __init__(self, batch_size):
+#  class SourceMeasure(Measure):
+#      """Describe a prior source of entropy, like a Gaussian distribution."""
+
+#      def __init__(self, batch_size: int):
+#          self.batch_size = batch_size
+
+#      def sample(self):
+#          pass
+
+
+class EmpiricalMeasure(Measure):
+    """Describe a structured `source` of entropy; a dataset."""
+
+    def __init__(self, dataset: AbstractDataset, batch_size: int, split=0):
+        super(EmpiricalMeasure, self).__init__()
+        self.dataset = dataset
         self.batch_size = batch_size
+        self.split = split
+        self.sampler = dataset.infinite_sampler(batch_size, split=split)
 
     def sample(self):
-        pass
-
-
-class EmpiricalMeasure(SourceMeasure):
-    # TODO This is to describe a well-structured source of entropy
-    # through a dataset (training or test).
-    def __init__(self, batch_size, dataset):
-        super(EmpiricalMeasure, self).__init__(batch_size)
-
-    def sample(self):
-        pass
+        return next(self.sampler)
 
 
 class InducedMeasure(Trainable, Measure):
-    # TODO this is to describe the induced measure of a `source` one
-    # push-through a measurable function `model`
-    def __init__(self, model, *source, **opt_options):
-        super(InducedMeasure, self).__init__(model, **opt_options)
+    """Describe the induced measure of a `source` through a measurable `model`."""
+
+    def __init__(self, name: str, model: Module, *source, **opt_options):
+        super(InducedMeasure, self).__init__(name, model, **opt_options)
         self.source = source
 
     def sample(self):

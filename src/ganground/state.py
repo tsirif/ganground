@@ -80,26 +80,24 @@ class State(object, metaclass=SingletonType):
             logger.info('Using CPU.')
 
     def register_module(self, module: Module):
-        if module.name not in self._modules:
-            self._modules[module.name] = module
-        else:
+        if module.name in self._modules:
             module_ = self._modules[module.name]
             if not isinstance(module_, Module):
                 module.load_state_dict(module_)
             else:
-                msg = "Module with name '{}' already registered in the State"
-                raise AssertionError(msg.format(module.name))
+                msg = "Module with name '%s' already registered in the State"
+                logger.warning(msg, module.name)
+        self._modules[module.name] = module
 
     def register_optimizer(self, trainable: Trainable):
-        if trainable.name not in self._optimizers:
-            self._optimizers[trainable.name] = trainable.optimizer
-        else:
+        if trainable.name in self._optimizers:
             optimizer_ = self._optimizers[trainable.name]
             if not isinstance(optimizer_, Trainable):
                 trainable.optimizer.load_state_dict(optimizer_)
             else:
                 msg = "Trainable with name '{}' already registered in the State"
-                raise AssertionError(msg.format(trainable.name))
+                logger.warning(msg, trainable.name)
+        self._optimizers[trainable.name] = trainable.optimizer
 
     def dump(self, path):
         state = object()
