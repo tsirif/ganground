@@ -26,32 +26,44 @@ class State(object, metaclass=SingletonType):
     def __init__(self, name, args):
         self.args = args
 
+        # Training components management
         self._modules = dict()
         self._optimizers = dict()
 
+        # Traning info management
         self.info = object()
         self.info.name = name  # Experiment must be named
-        self.info.epochs = 0  # Passes through the training set
-        self.info.iters = 0  # Optimization loops completed
-        self.info.inters = 0  # Checkpoint/Evaluation loops completed
+        self.info.epoch = 0  # Passes through the training set
+        self.info.iter = 0  # Optimization loops completed
+        self.info.inter = 0  # Checkpoint/Evaluation loops completed
         self.info.train_seed = args.seed  # Initial password for training
         # If a held out seed is used for evaluation
         self.info.eval_seed = args.eval_seed
+
+        # Device management and distributed training
         self.info.is_distributed = False
         if 'WORLD_SIZE' in os.environ:
             self.info.is_distributed = int(os.environ['WORLD_SIZE']) > 1
         self.info.world_size = 1
-        self.info.gpu = -1  # CPU is used
+        self.gpu = -1  # CPU is used
         self.local_rank = None  # No distributed
         if self.info.is_distributed:
-            self.local_rank = self.info.gpu = args.local_rank
+            self.gpu = self.local_rank = args.local_rank
         elif args.cuda:
-            self.info.gpu = args.cuda[0]
-        self.device = self.info.gpu
+            self.gpu = args.cuda[0]
+        self.device = self.gpu
         if self.info.is_distributed:
             torch.distributed.init_process_group(backend='nccl',
                                                  init_method='env://')
             self.info.world_size = torch.distributed.get_world_size()
+            logger.info("Initialized distributed training with world size: %d",
+                        self.info.world_size)
+
+        # Visualization management
+        # TODO W&B
+
+        # Dataset management?
+        # TODO
 
     @property
     def is_master_rank(self):
@@ -63,7 +75,7 @@ class State(object, metaclass=SingletonType):
 
     @property
     def is_cuda(self):
-        return self.info.gpu >= 0
+        return self.gpu >= 0
 
     @property
     def device(self):
@@ -74,10 +86,10 @@ class State(object, metaclass=SingletonType):
         if device_ >= 0:
             #  assert(torch.cuda.is_available() and torch.cuda.device_count() > device_)
             self._device = torch.device('cuda', device_)
-            logger.info('Using CUDA device: %d', device_)
+            logger.info("Using CUDA device: %d", device_)
         else:
             self._device = torch.device('cpu')
-            logger.info('Using CPU.')
+            logger.info("Using CPU")
 
     def register_module(self, module: Module):
         if module.name in self._modules:
@@ -107,11 +119,18 @@ class State(object, metaclass=SingletonType):
                             for name, opti in self._optimizers.items()}
         state.info = self.info
         state.args = self.args
-        torch.save(state, os.path.join(path, "snapshot.pkl"))
+        torch.save(state, path)
 
     def load(self, path):
-        state = torch.load(os.path.join(path, "snapshot.pkl"))
+        state = torch.load(path)
         self._modules = state.modules
         self._optimizers = state.optimizers
+        assert(self.info.is_distributed == state.info.is_distributed)
+        assert(self.info.world_size == state.info.world_size)
         self.info = state.info
-        # TODO Verify the hypothesis is that the args are exactly the same
+
+    def log_setting(self):
+        logger.info("Models:\n%s", self._modules)
+        logger.info("Optimizers:\n%s", self._optimizers)
+        logger.info("Info:\n%s", self.info.__dict__)
+        logger.info("Args:\n%s", self.args.__dict__)
