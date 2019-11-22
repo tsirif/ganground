@@ -29,11 +29,11 @@ class State(object, metaclass=SingletonType):
         # Training components management
         self._modules = dict()
         self._optimizers = dict()
+        self._samplers = dict()
 
         # Traning info management
         self.info = object()
         self.info.name = name  # Experiment must be named
-        self.info.epoch = 0  # Passes through the training set
         self.info.iter = 0  # Optimization loops completed
         self.info.inter = 0  # Checkpoint/Evaluation loops completed
         self.info.train_seed = args.seed  # Initial password for training
@@ -61,9 +61,6 @@ class State(object, metaclass=SingletonType):
 
         # Visualization management
         # TODO W&B
-
-        # Dataset management?
-        # TODO
 
     @property
     def is_master_rank(self):
@@ -100,6 +97,7 @@ class State(object, metaclass=SingletonType):
                 msg = "Module with name '%s' already registered in the State"
                 logger.warning(msg, module.name)
         self._modules[module.name] = module
+        return module
 
     def register_optimizer(self, trainable: Trainable):
         if trainable.name in self._optimizers:
@@ -110,6 +108,12 @@ class State(object, metaclass=SingletonType):
                 msg = "Trainable with name '{}' already registered in the State"
                 logger.warning(msg, trainable.name)
         self._optimizers[trainable.name] = trainable.optimizer
+        return trainable.optimizer
+
+    def samplers(self, name: str):
+        if name not in self._samplers:
+            self._samplers[name] = 0
+        return self._samplers[name]
 
     def dump(self, path):
         state = object()
@@ -117,6 +121,7 @@ class State(object, metaclass=SingletonType):
                          for name, module in self._modules.items()}
         state.optimizers = {name: opti.state_dict()
                             for name, opti in self._optimizers.items()}
+        state.samplers = self._samplers
         state.info = self.info
         state.args = self.args
         torch.save(state, path)
@@ -125,6 +130,7 @@ class State(object, metaclass=SingletonType):
         state = torch.load(path)
         self._modules = state.modules
         self._optimizers = state.optimizers
+        self._samplers = state.samplers
         assert(self.info.is_distributed == state.info.is_distributed)
         assert(self.info.world_size == state.info.world_size)
         self.info = state.info

@@ -35,15 +35,21 @@ class Measure(object, metaclass=ABCMeta):
 class EmpiricalMeasure(Measure):
     """Describe a structured `source` of entropy; a dataset."""
 
-    def __init__(self, dataset: AbstractDataset, batch_size: int, split=0):
+    def __init__(self, name: str, dataset: AbstractDataset, batch_size: int, split=0):
         super(EmpiricalMeasure, self).__init__()
         self.dataset = dataset
         self.batch_size = batch_size
         self.split = split
-        self.sampler = dataset.infinite_sampler(batch_size, split=split)
+        self.sampler = dataset.infinite_sampler(name, batch_size, split=split)
 
     def sample(self):
-        return next(self.sampler)
+        batch = next(self.sampler)
+        if len(batch) == 1:
+            return batch[0]
+        return batch
+
+
+# TODO what happens if multiple tensors in a batch? need for a marginal measure?
 
 
 class InducedMeasure(Trainable, Measure):

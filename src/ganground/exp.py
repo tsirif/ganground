@@ -123,10 +123,6 @@ class Experiment(nauka.exp.Experiment, ExperimentInterface):
         return self.state.device
 
     @property
-    def epoch(self):
-        return self.state.info.epoch
-
-    @property
     def iter(self):
         return self.state.info.iter
 
