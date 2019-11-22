@@ -100,7 +100,7 @@ class Factory(ABCMeta):
         cls.types = list(get_all_subclasses(cls.__base__))
         cls.types = {class_.__name__: class_
                      for class_ in cls.types if class_.__name__ != cls.__name__}
-        log.debug("Implementations found: %s", tuple(cls.typens.keys()))
+        log.debug("Implementations found: %s", tuple(cls.types.keys()))
 
     def __call__(cls, of_type, *args, **kwargs):
         """Create an object, instance of ``cls.__base__``, on first call.

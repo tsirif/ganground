@@ -13,13 +13,10 @@ import copy
 from nauka.utils.torch.optim import fromSpec as build_optimizer
 import torch
 
-# TODO Fill state of Nauka object
-# TODO Create visualization subpackage with w&b implemented interface
-# TODO Checkout a way to restore Nauka's state (Models + Optimizers)
-# (seeds are left out for now)
-# TODO assertions regarding dimensions of samples in `objectives.py`
-# TODO Create subpackage with `model`s: Interfaces, Builders, Initialization, CUDA
-# (part of the state)
+from ganground.nn import Module
+from ganground.state import State
+
+
 def update_average_model(target_net, source_net, beta):
     param_dict_src = dict(source_net.named_parameters())
     for p_name, p_target in target_net.named_parameters():
@@ -61,7 +58,9 @@ class Trainable(object):
                 update_average_model(self.trainable._avg_model,
                                      self.trainable._model, ema)
 
-    def __init__(self, model, ema=0, spec=None, **opt_options):
+    def __init__(self, name: str, model: Module,
+                 ema=0, spec=None, **opt_options):
+        self.name = name
         self._model = model
         self._avg_model = model
         if model is None:
@@ -72,10 +71,12 @@ class Trainable(object):
         if spec is not None:
             self.optimizer = build_optimizer(model.parameters(),
                                              spec, **opt_options)
+            State().register_optimizer(self)
             assert(1 > ema >= 0)
             self.ema = ema
             if ema > 0:
                 self._avg_model = copy.deepcopy(model)
+                State().register_module(self._avg_model)
                 self._avg_model.eval()
         self.eval()
 

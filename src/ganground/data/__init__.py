@@ -16,13 +16,7 @@ import torch
 
 from ganground.utils import Factory
 from ganground.random import PRNG
-
-
-# global variable indicating whether CUDA is being used
-try:
-    CUDA = torch.cuda.current_device() >= 0
-except RuntimeError:
-    CUDA = False
+from ganground.state import State
 
 
 def _worker_init_fn(worker_id):
@@ -46,9 +40,6 @@ def prepare_splits(splits, N):
 
 
 class AbstractDataset(object, metaclass=ABCMeta):
-    """
-    TODO Create SourceMeasure
-    """
 
     def __init__(self, root, num_workers=1, download=False, load=True,
                  splits=(1,), **options):
@@ -104,13 +95,13 @@ class AbstractDataset(object, metaclass=ABCMeta):
                                            shuffle=True,
                                            drop_last=True,
                                            num_workers=self.num_workers,
-                                           pin_memory=(CUDA is True),
+                                           pin_memory=State().is_cuda,
                                            worker_init_fn=_worker_init_fn,
                                            )
 
     def _fetch(self, loader, stream):
         batch = next(loader)
-        if CUDA:
+        if State().is_cuda:
             with torch.cuda.stream(stream):
                 batch = [x.cuda(non_blocking=True) for x in batch]
                 batch = self.transform(batch)
@@ -120,17 +111,17 @@ class AbstractDataset(object, metaclass=ABCMeta):
 
     def infinite_sampler(self, batch_size, split=0):
         fetch_stream = None
-        if CUDA:
+        if State().is_cuda:
             fetch_stream = torch.cuda.stream()
         while True:
             loader = iter(self.build_loader(batch_size, split=split))
             next_batch = self._fetch(loader, fetch_stream)
             try:
                 while True:
-                    if CUDA:
+                    if State().is_cuda:
                         torch.cuda.current_stream().wait_stream(fetch_stream)
                     current_batch = next_batch
-                    if CUDA:
+                    if State().is_cuda:
                         for x in current_batch:
                             x.record_stream(torch.cuda.current_stream())
                     next_batch = self._fetch(loader, fetch_stream)
