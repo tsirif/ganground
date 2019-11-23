@@ -53,6 +53,16 @@ class AbstractSingletonType(SingletonType, ABCMeta):
     pass
 
 
+def get_all_subclasses(parent):
+    """Get set of subclasses recursively"""
+    subclasses = set()
+    for subclass in parent.__subclasses__():
+        subclasses.add(subclass)
+        subclasses |= get_all_subclasses(subclass)
+
+    return subclasses
+
+
 class Factory(ABCMeta):
     """Instantiate appropriate wrapper for the infrastructure based on input
     argument, ``of_type``.
@@ -87,16 +97,9 @@ class Factory(ABCMeta):
                       entry_point.name, cls.__name__,
                       entry_point.dist.project_name, entry_point.dist.version)
 
-        # Get types visible from base module or package, but internal
-        def get_all_subclasses(parent):
-            """Get set of subclasses recursively"""
-            subclasses = set()
-            for subclass in parent.__subclasses__():
-                subclasses.add(subclass)
-                subclasses |= get_all_subclasses(subclass)
+        cls.find_types()
 
-            return subclasses
-
+    def find_types(cls):
         cls.types = list(get_all_subclasses(cls.__base__))
         cls.types = {class_.__name__: class_
                      for class_ in cls.types if class_.__name__ != cls.__name__}
@@ -121,6 +124,8 @@ class Factory(ABCMeta):
 
         :return: The object which was created on the first call.
         """
+        cls.find_types()
+
         for name, inherited_class in cls.types.items():
             if name.lower() == of_type.lower():
                 return inherited_class.__call__(*args, **kwargs)

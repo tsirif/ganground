@@ -66,17 +66,19 @@ class Trainable(object):
         if model is None:
             self.optimizer = None
             return
+        self._model = State().register_module(self._model)
 
         self.optimizer = None
         if spec is not None:
             self.optimizer = build_optimizer(model.parameters(),
                                              spec, **opt_options)
-            State().register_optimizer(self)
+            self.optimizer = State().register_optimizer(self)
             assert(1 > ema >= 0)
             self.ema = ema
             if ema > 0:
-                self._avg_model = copy.deepcopy(model)
-                State().register_module(self._avg_model)
+                self._avg_model = copy.deepcopy(self._model)
+                self._avg_model.name += "-ema"
+                self._avg_model = State().register_module(self._avg_model)
                 self._avg_model.eval()
         self.eval()
 

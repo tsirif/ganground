@@ -16,8 +16,4 @@ class Module(torch.nn.Module):
 
     def __init__(self, name, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
-        self._name = name
-
-    @property
-    def name(self):
-        return self._name
+        self.name = name
