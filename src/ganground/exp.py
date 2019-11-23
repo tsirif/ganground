@@ -153,7 +153,7 @@ class Experiment(nauka.exp.Experiment, ExperimentInterface):
         be assigned, and it is equal to self.nextSnapshotNum.
 
         """
-        self.state.dump(os.path.join(path, "snapshot.pkl"))
+        self.state.dump(path)
         return self
 
     def load(self, path):
@@ -164,7 +164,7 @@ class Experiment(nauka.exp.Experiment, ExperimentInterface):
         checkpoint with the given `path`.
 
         """
-        self.state.load(os.path.join(path, "snapshot.pkl"))
+        self.state.load(path)
         return self
 
     def fromScratch(self):

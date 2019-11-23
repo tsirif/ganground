@@ -14,8 +14,7 @@ import os
 import torch
 
 from ganground.utils import SingletonType
-from ganground.optim import Trainable
-from ganground.nn import Module
+from nauka.utils import PlainObject
 
 
 logger = logging.getLogger(__name__)
@@ -32,7 +31,7 @@ class State(object, metaclass=SingletonType):
         self._samplers = dict()
 
         # Traning info management
-        self.info = object()
+        self.info = PlainObject()
         self.info.name = name  # Experiment must be named
         self.info.iter = 0  # Optimization loops completed
         self.info.inter = 0  # Checkpoint/Evaluation loops completed
@@ -60,6 +59,10 @@ class State(object, metaclass=SingletonType):
                         self.info.world_size)
 
         # Visualization management
+        # deepcopy of args
+        # throw away args that we don't want
+        # call wandb init
+        # call wandb config
         # TODO W&B
 
     @property
@@ -88,7 +91,8 @@ class State(object, metaclass=SingletonType):
             self._device = torch.device('cpu')
             logger.info("Using CPU")
 
-    def register_module(self, module: Module):
+    def register_module(self, module):
+        from ganground.nn import Module
         if module.name in self._modules:
             module_ = self._modules[module.name]
             if not isinstance(module_, Module):
@@ -97,9 +101,11 @@ class State(object, metaclass=SingletonType):
                 msg = "Module with name '%s' already registered in the State"
                 logger.warning(msg, module.name)
         self._modules[module.name] = module
+        # TODO wandb watch
         return module
 
-    def register_optimizer(self, trainable: Trainable):
+    def register_optimizer(self, trainable):
+        from ganground.optim import Trainable
         if trainable.name in self._optimizers:
             optimizer_ = self._optimizers[trainable.name]
             if not isinstance(optimizer_, Trainable):
@@ -116,7 +122,8 @@ class State(object, metaclass=SingletonType):
         return self._samplers[name]
 
     def dump(self, path):
-        state = object()
+        pytorch_path = os.path.join(path, "snapshot.pkl")
+        state = PlainObject()
         state.modules = {name: module.state_dict()
                          for name, module in self._modules.items()}
         state.optimizers = {name: opti.state_dict()
@@ -124,16 +131,21 @@ class State(object, metaclass=SingletonType):
         state.samplers = self._samplers
         state.info = self.info
         state.args = self.args
-        torch.save(state, path)
+        torch.save(state, pytorch_path)
+
+        # TODO wandb save
 
     def load(self, path):
-        state = torch.load(path)
+        pytorch_path = os.path.join(path, "snapshot.pkl")
+        state = torch.load(pytorch_path)
         self._modules = state.modules
         self._optimizers = state.optimizers
         self._samplers = state.samplers
         assert(self.info.is_distributed == state.info.is_distributed)
         assert(self.info.world_size == state.info.world_size)
         self.info = state.info
+
+        # TODO wandb restore
 
     def log_setting(self):
         logger.info("Models:\n%s", self._modules)

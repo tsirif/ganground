@@ -28,6 +28,7 @@ def _str_to_utf8bytes(x, errors="strict"):
 def _pbkdf2(dkLen, password, salt="", rounds=1, hash="sha256"):
     password = _str_to_utf8bytes(password)
     salt = _str_to_utf8bytes(salt)
+    # FIXME
     return hashlib.pbkdf2_hmac(hash, password, salt, rounds, dkLen)
 
 

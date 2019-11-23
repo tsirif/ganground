@@ -10,6 +10,8 @@ r"""
 """
 import torch
 
+from ganground.state import State
+
 
 class Module(torch.nn.Module):
     """Named `torch.nn.module`."""
@@ -17,3 +19,10 @@ class Module(torch.nn.Module):
     def __init__(self, name, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
         self.name = name
+
+        # TODO Perhaps here weight initialization code could lie
+        state = State()
+        if state.is_cuda:
+            self.cuda(device=state.device)
+        else:
+            self.cpu()

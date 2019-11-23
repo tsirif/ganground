@@ -33,7 +33,6 @@ install_requires = [
 packages = [
     'ganground',
     'ganground.data',
-    'ganground.exp',
     'ganground.metric',
     ]
 
