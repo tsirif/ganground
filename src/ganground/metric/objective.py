@@ -24,30 +24,30 @@ LOG_2 = math.log(2.)
 class AbstractObjective(object, metaclass=AbstractSingletonType):
 
     def estimate_measure_loss(self, cp, cq,
-                              cp_to_pos=True, saturating=True,
+                              cp_to_neg=False, nonsat=False,
                               calcpp=True, calcqq=True, **obj_kwargs):
-        if saturating:
+        if not nonsat:
             loss = self.estimate_metric(
-                cp, cq, cp_to_pos=cp_to_pos,
+                cp, cq, cp_to_neg=cp_to_neg,
                 calcpp=calcpp, calcqq=calcqq, **obj_kwargs)
         else:
             loss = - self.estimate_metric(
-                cq, cp, cp_to_pos=cp_to_pos,
+                cq, cp, cp_to_neg=cp_to_neg,
                 calcpp=calcpp, calcqq=calcqq, **obj_kwargs)
 
         return loss
 
     @abstractmethod
-    def estimate_metric(self, cp, cq, cp_to_pos=True,
+    def estimate_metric(self, cp, cq, cp_to_neg=False,
                         calcpp=True, calcqq=True, **obj_kwargs):
         pass
 
 
 class JSD(AbstractObjective):
 
-    def estimate_metric(self, cp, cq, cp_to_pos=True,
+    def estimate_metric(self, cp, cq, cp_to_neg=False,
                         calcpp=True, calcqq=True, **obj_kwargs):
-        if cp_to_pos is True:
+        if cp_to_neg is False:
             pos = F.logsigmoid(cp).mean() if calcpp else 0
             neg = F.logsigmoid(-cq).mean() if calcqq else 0
         else:
@@ -56,15 +56,14 @@ class JSD(AbstractObjective):
         return 0.5 * (pos + neg) + LOG_2
 
 
-class GAN(JSD):
-    pass
+class GAN(JSD): pass
 
 
 class W1(AbstractObjective):
 
-    def estimate_metric(self, cp, cq, cp_to_pos=True,
+    def estimate_metric(self, cp, cq, cp_to_neg=False,
                         calcpp=True, calcqq=True, **obj_kwargs):
-        if cp_to_pos is True:
+        if cp_to_neg is False:
             pos = cp.mean() if calcpp else 0
             neg = - cq.mean() if calcqq else 0
         else:
@@ -73,15 +72,14 @@ class W1(AbstractObjective):
         return pos + neg
 
 
-class WGAN(W1):
-    pass
+class WGAN(W1): pass
 
 
 class RGAN(AbstractObjective):
 
-    def estimate_metric(self, cp, cq, cp_to_pos=True,
+    def estimate_metric(self, cp, cq, cp_to_neg=False,
                         calcpp=True, calcqq=True, **obj_kwargs):
-        if cp_to_pos is True:
+        if cp_to_neg is False:
             metric = F.logsigmoid(cp - cq).mean()
         else:
             metric = F.logsigmoid(cq - cp).mean()
@@ -90,9 +88,9 @@ class RGAN(AbstractObjective):
 
 class RAGAN(AbstractObjective):
 
-    def estimate_metric(self, cp, cq, cp_to_pos=True,
+    def estimate_metric(self, cp, cq, cp_to_neg=False,
                         calcpp=True, calcqq=True, **obj_kwargs):
-        if cp_to_pos is True:
+        if cp_to_neg is False:
             metric = F.logsigmoid(cp.mean() - cq).mean() +\
                 F.logsigmoid(cp - cq.mean()).mean()
         else:
@@ -103,7 +101,7 @@ class RAGAN(AbstractObjective):
 
 class MMD2(AbstractObjective):
 
-    def estimate_metric(self, cp, cq, cp_to_pos=True,
+    def estimate_metric(self, cp, cq, cp_to_neg=False,
                         calcpp=True, calcqq=True, kernel='gaussian',
                         **obj_kwargs):
         kernel_ = Kernel(kernel)

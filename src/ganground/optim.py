@@ -59,7 +59,7 @@ class Trainable(object):
                                      self.trainable._model, ema)
 
     def __init__(self, name: str, model: Module,
-                 ema=0, spec=None, **opt_options):
+                 spec=None, ema=0, **opt_options):
         self.name = name
         self._model = model
         self._avg_model = model
