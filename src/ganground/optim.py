@@ -39,7 +39,7 @@ class Trainable(object):
     class step_context(object):
         def __init__(self, trainable):
             self.trainable = trainable
-            self.optimizer = trainable._optimizer
+            self.optimizer = trainable.optimizer
 
         def __enter__(self):
             if self.optimizer is None:
@@ -54,7 +54,7 @@ class Trainable(object):
                 return
             self.optimizer.step()
             ema = self.trainable.ema
-            if ema > 0:
+            if ema:
                 update_average_model(self.trainable._avg_model,
                                      self.trainable._model, ema)
 
@@ -63,32 +63,38 @@ class Trainable(object):
         self.name = name
         self._model = model
         self._avg_model = model
+        self.training = False
         if model is None:
             self.optimizer = None
             return
-        self._model = State().register_module(self._model)
 
+        if self.name is not None:
+            self._model = State().register_module(self._model)
         self.optimizer = None
         if spec is not None:
+            assert(self.name is not None)
             self.optimizer = build_optimizer(model.parameters(),
                                              spec, **opt_options)
             self.optimizer = State().register_optimizer(self)
-            assert(1 > ema >= 0)
-            self.ema = ema
-            if ema > 0:
+            self.ema = None
+            if ema:
+                assert(1 > ema > 0)
+                self.ema = ema
                 self._avg_model = copy.deepcopy(self._model)
                 self._avg_model.name += "-ema"
                 self._avg_model = State().register_module(self._avg_model)
                 self._avg_model.eval()
-        self.eval()
+        self._model.eval()
 
     def train(self):
         self.training = True
-        self._model.train()
+        if self._model is not None:
+            self._model.train()
 
     def eval(self):
         self.training = False
-        self._model.eval()
+        if self._model is not None:
+            self._model.eval()
 
     def requires_grad_(self, value=True):
         if self._model is not None:

@@ -125,7 +125,6 @@ class Factory(ABCMeta):
         :return: The object which was created on the first call.
         """
         cls.find_types()
-
         for name, inherited_class in cls.types.items():
             if name.lower() == of_type.lower():
                 return inherited_class.__call__(*args, **kwargs)
@@ -137,7 +136,7 @@ class Factory(ABCMeta):
         raise NotImplementedError(error)
 
 
-class SingletonFactory(AbstractSingletonType, Factory):
+class SingletonFactory(Factory, AbstractSingletonType):
     """Wrapping `Factory` with `SingletonType`. Keep compatibility with `AbstractSingletonType`."""
 
     pass

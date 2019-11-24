@@ -28,7 +28,6 @@ def _str_to_utf8bytes(x, errors="strict"):
 def _pbkdf2(dkLen, password, salt="", rounds=1, hash="sha256"):
     password = _str_to_utf8bytes(password)
     salt = _str_to_utf8bytes(salt)
-    # FIXME
     return hashlib.pbkdf2_hmac(hash, password, salt, rounds, dkLen)
 
 
@@ -134,7 +133,7 @@ class TorchPRNG(AbstractPRNG):
 
     def get_random_state(self, password, salt="", rounds=1, hash="sha256"):
         """This produces a seed, not a prng state!!!"""
-        return _pbkdf2_to_int(64, password, salt, round, hash, signed=True)
+        return _pbkdf2_to_int(64, password, salt, rounds, hash, signed=True)
 
     def seed(self, password):
         seed = self.get_random_state(password, salt="torch.random")
@@ -143,11 +142,11 @@ class TorchPRNG(AbstractPRNG):
 
     @property
     def state(self):
-        return self.torch.random.get_prng_state()
+        return self.torch.random.get_rng_state()
 
     @state.setter
     def state(self, state_):
-        self.torch.random.set_prng_state(state_)
+        self.torch.random.set_rng_state(state_)
 
 
 class TorchCudaPRNG(TorchPRNG):
@@ -163,13 +162,13 @@ class TorchCudaPRNG(TorchPRNG):
     def state(self):
         if not State().is_cuda:
             return
-        return self.torch.cuda.get_prng_state()
+        return self.torch.cuda.get_rng_state()
 
     @state.setter
     def state(self, state_):
         if not State().is_cuda:
             return
-        self.torch.cuda.set_prng_state(state_)
+        self.torch.cuda.set_rng_state(state_)
 
 
 class PRNG(AbstractPRNG, metaclass=SingletonFactory):
@@ -178,8 +177,8 @@ class PRNG(AbstractPRNG, metaclass=SingletonFactory):
     .. seealso:: `Factory` metaclass and `AbstractPRNG` interface.
     """
 
-    @contextmanager
     @classmethod
+    @contextmanager
     def reseed(cls, password=None):
         if password is None:
             yield

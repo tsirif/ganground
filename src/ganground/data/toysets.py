@@ -15,6 +15,7 @@ from abc import abstractmethod
 
 import numpy
 import sklearn.datasets
+import torch
 from torch.utils.data import TensorDataset
 
 from ganground.data import AbstractDataset
@@ -26,7 +27,7 @@ class _Synthetic(AbstractDataset):
         dataset = self.build(size, **options)
         dataset = dataset.astype('float32')
         numpy.random.shuffle(dataset)
-        return TensorDataset(dataset)
+        return TensorDataset(torch.from_numpy(dataset))
 
     @abstractmethod
     def build(self, size, **options):

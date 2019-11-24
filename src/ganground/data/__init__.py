@@ -85,7 +85,7 @@ class AbstractDataset(object, metaclass=ABCMeta):
             raise RuntimeError(self.__class__.__name__ + ' not found.' +
                                ' You can use download=True to download it')
         self._data = self.prepare(self.root, **self.options)
-        self.n_data = len(self.data)
+        self.n_data = len(self._data)
         self.splits = prepare_splits(self.splits, self.n_data)
         self.n_splits = len(self.splits)
         self._data = torch.utils.data.random_split(self._data, self.splits)

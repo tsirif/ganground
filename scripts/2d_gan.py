@@ -26,6 +26,28 @@ from ganground.metric.kernel import (mmd2, AbstractKernel,
 from ganground.random import PRNG
 
 
+logger = logging.getLogger(__name__)
+
+
+# Plot settings
+SMALL_SIZE = 12
+MEDIUM_SIZE = 14
+BIGGER_SIZE = 18
+FIG_X_SIZE_IN = 12
+FIG_Y_SIZE_IN = 12
+DPI = 96
+FPS = 10
+CMAP_DIVERGING = mpl.cm.seismic
+CMAP_SEQUENTIAL = mpl.cm.plasma
+plt.rc('font', size=SMALL_SIZE)          # controls default text sizes
+plt.rc('axes', titlesize=SMALL_SIZE)     # fontsize of the axes title
+plt.rc('axes', labelsize=MEDIUM_SIZE)    # fontsize of the x and y labels
+plt.rc('xtick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+plt.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+plt.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
+plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
+
+
 LAPLC_KERNEL_SIGMAS = (0.01, 0.025, 0.1, 0.25, 1)
 
 
@@ -162,9 +184,9 @@ class TwoDExperiment(Experiment):
     def define(self):
         # Prepare dataset
         self.dataset = Dataset(self.args.dataset,  # type
-                               self.dataDir,
+                               self.datadir,
                                splits=(9, 1),  # 9/10 train, 1/10 eval
-                               size=100000)  # 90000 for train, 10000 for eval
+                               size=1000)  # 90000 for train, 10000 for eval
 
         # Create networks
         self.generator = Generator('gener', self.args)
@@ -233,6 +255,7 @@ class TwoDExperiment(Experiment):
                 while cy.size(0) < cx.size(0):
                     cy = torch.cat([cy, self.Q.sample()])
             cy = cy[:cx.size(0)]
+            logger.info("len(cx)=%d , len(cy)=%d", len(cx), len(cy))
 
             target_dist.append(cx)
             samples.append(cy)
@@ -270,7 +293,7 @@ class TwoDExperiment(Experiment):
 
         bot, top = Xspace[0], Xspace[-1]
         background = ax.imshow(disc_map, cmap=CMAP_DIVERGING,
-                               vmin=0.3, vmax=0.7,
+                               vmin=0, vmax=1,
                                alpha=0.4, interpolation='lanczos',
                                extent=(bot, top, bot, top), origin='lower')
         CS = ax.contour(norm_grad_disc_map, cmap=CMAP_SEQUENTIAL, alpha=0.25,
@@ -289,10 +312,10 @@ class TwoDExperiment(Experiment):
         msg = "Eval Metric (×1e3) <mean±std>: {:4.4f}±{:4.4f} | Update Steps: {}"
         mmd_mean = block_stats.mean() * 1e3
         mmd_std = block_stats.std() * 1e3
-        msg = msg.format(mmd_mean, mmd_std, steps)
+        msg = msg.format(mmd_mean, mmd_std, self.iter)
 
         plt.title(msg, loc='left')
-        image_path = os.path.join(self.logdir, 'step-' + str(steps) + '.png')
+        image_path = os.path.join(self.logdir, 'step-' + str(self.iter) + '.png')
         bbox = Bbox.from_bounds(1.16, 1, 960 / DPI, 960 / DPI)
         fig.savefig(image_path, bbox_inches=bbox)
         plt.close(fig)
@@ -375,7 +398,7 @@ class root(nauka.ap.Subcommand):
 
             taskp = argp.add_argument_group(
                 "Task", "Variations on the task to be solved.")
-            taskp.add_argument("--dataset", default="8gaussians", type=str,
+            taskp.add_argument("--dataset", default="g8_2d", type=str,
                                choices=tuple(Dataset.types.keys()),
                                help="Dataset Selection.")
 

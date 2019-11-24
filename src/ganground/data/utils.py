@@ -29,7 +29,7 @@ class MultiEpochSampler(torch.utils.data.Sampler):
 
     def __init__(self, data_source,
                  batches_seen=0, batch_size=128):
-        self.n_data = len(self.data_source)
+        self.n_data = len(data_source)
         self.batches_seen = batches_seen
         self.batch_size = batch_size
 

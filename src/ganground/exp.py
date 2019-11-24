@@ -107,10 +107,12 @@ class Experiment(nauka.exp.Experiment, ExperimentInterface):
         self.args = args
         # This is the time where state is created!
         self.state = State(self.name, self.__class__.__name__, args)
-
-        super(Experiment, self).__init__(os.path.join(args.baseDir,
-                                                      self.__class__.__name__,
-                                                      self.name))
+        if args.workDir:
+            super(Experiment, self).__init__(args.workDir)
+        else:
+            super(Experiment, self).__init__(os.path.join(args.baseDir,
+                                                          self.__class__.__name__,
+                                                          self.name))
         self.mkdirp(self.logdir)
         logger.info("Initializing experiment with name: {}".format(self.name))
 
@@ -126,9 +128,22 @@ class Experiment(nauka.exp.Experiment, ExperimentInterface):
     def iter(self):
         return self.state.info.iter
 
+    @iter.setter
+    def iter(self, iter_):
+        self.state.info.iter = iter_
+
     @property
     def inter(self):
         return self.state.info.inter
+
+    @inter.setter
+    def inter(self, inter_):
+        self.state.info.inter = inter_
+
+    @property
+    def datadir(self):
+        """Returns the root directory where datasets reside."""
+        return self.args.dataDir
 
     @property
     def logdir(self):

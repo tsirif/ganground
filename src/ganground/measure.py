@@ -32,11 +32,11 @@ class Measure(object, metaclass=ABCMeta):
 #          pass
 
 
-class EmpiricalMeasure(Measure):
+class EmpiricalMeasure(Trainable, Measure):
     """Describe a structured `source` of entropy; a dataset."""
 
     def __init__(self, name: str, dataset: AbstractDataset, batch_size: int, split=0):
-        super(EmpiricalMeasure, self).__init__()
+        super(EmpiricalMeasure, self).__init__(None, None)
         self.dataset = dataset
         self.batch_size = batch_size
         self.split = split
@@ -57,7 +57,13 @@ class InducedMeasure(Trainable, Measure):
 
     def __init__(self, name: str, model: Module, *source, **opt_options):
         super(InducedMeasure, self).__init__(name, model, **opt_options)
+        assert(len(source) > 0)
         self.source = source
 
     def sample(self):
+        if self.model is None:
+            sample = [s.sample() for s in self.source]
+            if len(sample) == 1:
+                return sample[0]
+            return sample
         return self.model(*[s.sample() for s in self.source])
