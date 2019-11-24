@@ -110,5 +110,48 @@ class MMD2(AbstractObjective):
                                          try_pdist=kernel in Kernel.rbf)
         return mmd2(*kernel_(cp, cq, **obj_kwargs))
 
+class KL(AbstractObjective):
+    """
+    We use the Fenchel Dual formulation to compute this. We compute other representation which is a lower bound on the Dual of KL.
+    """
+    def estimate_metric(self, cp, cq, cp_to_neg=False,
+                        calcpp=True, calcqq=True, **obj_kwargs):
+        if cp_to_neg is False:
+            pos = 1 + cp.mean() if calcpp else 0
+            neg = - torch.exp(cq).mean() if calcqq else 0
+        else:
+            neg = -1 - cp.mean() if calcpp else 0
+            pos = torch.exp(cq).mean() if calcqq else 0
+        return pos + neg
+
+class KLDV(AbstractObjective):
+    """
+    We use the Fenchel Dual formulation to compute this. We compute Donsker-Varadhan representation which is a lower bound on the Dual of KL.
+    """
+    def estimate_metric(self, cp, cq, cp_to_neg=False,
+                        calcpp=True, calcqq=True, **obj_kwargs):
+        if cp_to_neg is False:
+            pos = cp.mean() if calcpp else 0
+            neg = - torch.log(torch.exp(cq).mean()) if calcqq else 0
+        else:
+            neg = - cp.mean() if calcpp else 0
+            pos = torch.log(torch.exp(cq).mean()) if calcqq else 0
+        return pos + neg
+
+class Hellinger(AbstractObjective):
+    """
+    We use the Fenchel Dual formulation to compute this. 
+    """
+    def estimate_metric(self, cp, cq, cp_to_neg=False,
+                        calcpp=True, calcqq=True, **obj_kwargs):
+        if cp_to_neg is False:
+            pos = cp.mean() if calcpp else 0
+            fenchel_cq = cq/(1 - cq)
+            neg = - (fenchel_cq).mean() if calcqq else 0
+        else:
+            neg = - cp.mean() if calcpp else 0
+            fenchel_cq = cq/(1 - cq)
+            pos = (fenchel_cq).mean() if calcqq else 0
+        return pos + neg
 
 class Objective(AbstractObjective, metaclass=SingletonFactory): pass
