@@ -106,7 +106,7 @@ class Experiment(nauka.exp.Experiment, ExperimentInterface):
         args.__dict__.pop("__cls__", None)
         self.args = args
         # This is the time where state is created!
-        self.state = State(self.name, args)
+        self.state = State(self.name, self.__class__.__name__, args)
 
         super(Experiment, self).__init__(os.path.join(args.baseDir,
                                                       self.__class__.__name__,
@@ -172,6 +172,7 @@ class Experiment(nauka.exp.Experiment, ExperimentInterface):
         password = "Seed: {} Init".format(self.args.seed)
         PRNG.seed(password)
         self.define()
+        self.state.watch()
         return self
 
     def fromSnapshot(self, path):

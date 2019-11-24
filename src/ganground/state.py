@@ -10,19 +10,20 @@ r"""
 """
 import logging
 import os
+import copy
 
 import torch
 
 from ganground.utils import SingletonType
 from nauka.utils import PlainObject
-
+from ganground.tracking import Wandb
 
 logger = logging.getLogger(__name__)
 
 
 class State(object, metaclass=SingletonType):
 
-    def __init__(self, name, args):
+    def __init__(self, name, project, args):
         self.args = args
 
         # Training components management
@@ -58,12 +59,15 @@ class State(object, metaclass=SingletonType):
             logger.info("Initialized distributed training with world size: %d",
                         self.info.world_size)
 
+        '''
         # Visualization management
         # deepcopy of args
         # throw away args that we don't want
         # call wandb init
         # call wandb config
-        # TODO W&B
+        '''
+        self.tracking = Wandb(name=name, id=name, project=project)
+        self.tracking.set_config(copy.deepcopy(args))
 
     @property
     def is_master_rank(self):
@@ -101,7 +105,6 @@ class State(object, metaclass=SingletonType):
                 msg = "Module with name '%s' already registered in the State"
                 logger.warning(msg, module.name)
         self._modules[module.name] = module
-        # TODO wandb watch
         return module
 
     def register_optimizer(self, trainable):
@@ -133,7 +136,8 @@ class State(object, metaclass=SingletonType):
         state.args = self.args
         torch.save(state, pytorch_path)
 
-        # TODO wandb save
+        # wandb save
+        self.tracking.save()
 
     def load(self, path):
         pytorch_path = os.path.join(path, "snapshot.pkl")
@@ -145,10 +149,14 @@ class State(object, metaclass=SingletonType):
         assert(self.info.world_size == state.info.world_size)
         self.info = state.info
 
-        # TODO wandb restore
+        # wandb restore
+        self.tracking.restore()
 
     def log_setting(self):
         logger.info("Models:\n%s", self._modules)
         logger.info("Optimizers:\n%s", self._optimizers)
         logger.info("Info:\n%s", self.info.__dict__)
         logger.info("Args:\n%s", self.args.__dict__)
+
+    def watch(self):
+        self.tracking.watch(tuple(self._modules.values()))

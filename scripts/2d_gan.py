@@ -198,18 +198,22 @@ class TwoDExperiment(Experiment):
             giters, diters = self.g_d_iters
             # Update Discriminator
             for _ in range(diters):
-                self.metric.separate(self.args.obj_type,
+                dval = self.metric.separate(self.args.obj_type,
                                      cp_to_neg=self.args.p2neg)
+            self.state.tracking.log({'discriminator loss': dval})
 
             # Update Generator
             for _ in range(giters):
-                self.metric.minimize(self.args.obj_type,
+                gval = self.metric.minimize(self.args.obj_type,
                                      nonsat=self.args.nonsat,
                                      cp_to_neg=self.args.p2neg)
+            self.state.tracking.log({'generator loss': gval})
 
         # Evaluation and Visualization
         with PRNG.reseed(self.args.eval_seed):
-            self.visualize()
+            mmd_mean, mmd_std = self.visualize()
+            self.state.tracking.log({'eval mmd mean': mmd_mean})
+            self.state.tracking.log({'eval mmd std': mmd_std})
 
     def visualize(self):
         """Generate samples from a given fixed set of noise vectors and
@@ -292,6 +296,7 @@ class TwoDExperiment(Experiment):
         bbox = Bbox.from_bounds(1.16, 1, 960 / DPI, 960 / DPI)
         fig.savefig(image_path, bbox_inches=bbox)
         plt.close(fig)
+        return mmd_mean, mmd_std
 
     def animate(self):
         import imageio
