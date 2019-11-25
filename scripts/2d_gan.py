@@ -222,14 +222,14 @@ class GAN2D(Experiment):
             for _ in range(diters):
                 metric = self.metric.separate(self.args.obj_type,
                                               cp_to_neg=self.args.p2neg)
-                metric_summary.append(metric)
+                metric_summary.append(metric.unsqueeze(0))
 
             # Update Generator
             for _ in range(giters):
                 gval = self.metric.minimize(self.args.obj_type,
                                             nonsat=self.args.nonsat,
                                             cp_to_neg=self.args.p2neg)
-                loss_summary.append(gval)
+                loss_summary.append(gval.unsqueeze(0))
 
         self.log(metric=torch.cat(metric_summary).mean())
         self.log(**{'generator loss': torch.cat(loss_summary).mean()})
@@ -375,12 +375,12 @@ class root(nauka.ap.Subcommand):
             argp.add_argument("--fastdebug", action=nauka.ap.FastDebug)
 
             argp.add_argument(
-                "-s", "--seed", default='3141592653679', type=str,
-                help="Seed for PRNGs.")
+                "-s", "--seed", default='0x6a09e667f3bcc908', type=str,
+                help="Seed for PRNGs. Default is 64-bit fractional expansion of sqrt(2).")
             argp.add_argument(
                 "-es", "--eval-seed", default=None, type=str,
                 help="Frozen seed for PRNGs during evaluation/visualization.")
-            argp.add_argument("--train-iters", "-it", default=60000, type=int,
+            argp.add_argument("--train-iters", "-it", default=10000, type=int,
                               help="Number of generator iterations to train for")
             argp.add_argument("--discr-iters", default=1, type=int,
                               help="How many discriminator iterations per generator iteration.")
