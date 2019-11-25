@@ -24,6 +24,7 @@ from ganground.metric.kernel import (mmd2, AbstractKernel,
                                      cross_mean_kernel_wrap,
                                      _pairwise_dist)
 from ganground.random import PRNG
+from ganground.tracking import WandbParse
 
 
 logger = logging.getLogger(__name__)
@@ -132,7 +133,7 @@ class Discriminator(Module):
         return self.output(self.main(inputs))
 
 
-class TwoDExperiment(Experiment):
+class GAN2D(Experiment):
     @property
     def g_d_iters(self):
         diters = 0
@@ -142,6 +143,14 @@ class TwoDExperiment(Experiment):
         return giters, diters
 
     @property
+    def hyperparams(self):
+        args = super(GAN2D, self).hyperparams
+        del args.train_iters
+        del args.train_period
+        del args.eval_seed
+        return args
+
+    @property
     def name(self):
         default_name = "{:s}".format(self.args.obj_type)
         giters, diters = self.g_d_iters
@@ -149,32 +158,21 @@ class TwoDExperiment(Experiment):
             default_name += "({:d}-{:d})".format(diters, giters)
         default_name += "-{:s}".format(self.args.dataset)
 
-        #  if self.args.g_opt == 'SGD':
-        #      default_name += '-g' + self.args.g_opt + \
-        #          "({:.4f},{:.2f})".format(self.args.g_lr, self.args.g_mom)
-        #  elif self.args.g_opt == 'Adam':
-        #      default_name += '-g' + self.args.g_opt + \
-        #          "({:.4f},{:.2f},{:.2f})".format(self.args.g_lr, self.args.g_mom,
-        #                                          self.args.g_beta2)
-
-        #  if self.args.d_opt == 'SGD':
-        #      default_name += '-d' + self.args.d_opt + \
-        #          "({:.4f},{:.2f})".format(self.args.d_lr, self.args.d_mom)
-        #  elif self.args.d_opt == 'Adam':
-        #      default_name += '-d' + self.args.d_opt + \
-        #          "({:.4f},{:.2f},{:.2f})".format(self.args.d_lr, self.args.d_mom,
-        #                                          self.args.d_beta2)
-
+        default_name += '-d'
+        default_name += self.args.d_opt.name
         if self.args.sn:
             default_name += "-SN"
-
         #  if self.args.gp:
         #      default_name += "-GP({:.2f})".format(self.args.gp)
 
+        default_name += '-g'
+        default_name += self.args.g_opt.name
         if self.args.g_ema:
             default_name += "-ema({:.3f})".format(self.args.g_ema)
 
-        return default_name if not self.args.name else "-".join([default_name] + self.args.name)
+        if not self.args.name:
+            return "-".join([default_name, self.hash(10)])
+        return "-".join([default_name] + self.args.name + [self.hash(10)])
 
     @property
     def is_done(self):
@@ -210,6 +208,8 @@ class TwoDExperiment(Experiment):
 
     def execute(self):
         # Training
+        metric_summary = []
+        loss_summary = []
         for _ in range(self.args.train_period):
             sys.stdout.write("{}/{}\r".format(self.iter + 1, self.args.train_iters))
             sys.stdout.flush()
@@ -220,22 +220,25 @@ class TwoDExperiment(Experiment):
             giters, diters = self.g_d_iters
             # Update Discriminator
             for _ in range(diters):
-                dval = self.metric.separate(self.args.obj_type,
-                                     cp_to_neg=self.args.p2neg)
-            self.state.tracking.log({'discriminator loss': dval})
+                metric = self.metric.separate(self.args.obj_type,
+                                              cp_to_neg=self.args.p2neg)
+                metric_summary.append(metric)
 
             # Update Generator
             for _ in range(giters):
                 gval = self.metric.minimize(self.args.obj_type,
-                                     nonsat=self.args.nonsat,
-                                     cp_to_neg=self.args.p2neg)
-            self.state.tracking.log({'generator loss': gval})
+                                            nonsat=self.args.nonsat,
+                                            cp_to_neg=self.args.p2neg)
+                loss_summary.append(gval)
+
+        self.log(metric=torch.cat(metric_summary).mean())
+        self.log(**{'generator loss': torch.cat(loss_summary).mean()})
 
         # Evaluation and Visualization
         with PRNG.reseed(self.args.eval_seed):
             mmd_mean, mmd_std = self.visualize()
-            self.state.tracking.log({'eval mmd mean': mmd_mean})
-            self.state.tracking.log({'eval mmd std': mmd_std})
+            self.log(**{'eval mmd mean (×1e3)': mmd_mean})
+            self.log(**{'eval mmd std (×1e3)': mmd_std})
 
     def visualize(self):
         """Generate samples from a given fixed set of noise vectors and
@@ -255,7 +258,7 @@ class TwoDExperiment(Experiment):
                 while cy.size(0) < cx.size(0):
                     cy = torch.cat([cy, self.Q.sample()])
             cy = cy[:cx.size(0)]
-            logger.info("len(cx)=%d , len(cy)=%d", len(cx), len(cy))
+            logger.debug("len(cx)=%d , len(cy)=%d", len(cx), len(cy))
 
             target_dist.append(cx)
             samples.append(cy)
@@ -318,6 +321,7 @@ class TwoDExperiment(Experiment):
         image_path = os.path.join(self.logdir, 'step-' + str(self.iter) + '.png')
         bbox = Bbox.from_bounds(1.16, 1, 960 / DPI, 960 / DPI)
         fig.savefig(image_path, bbox_inches=bbox)
+        self.log(viz=fig)
         plt.close(fig)
         return mmd_mean, mmd_std
 
@@ -359,23 +363,24 @@ class root(nauka.ap.Subcommand):
         def addArgs(cls, argp):
             """Add arguments in ``train`` subcommand."""
             mtxp = argp.add_mutually_exclusive_group()
-            mtxp.add_argument("-w", "--workDir", default=None, type=str,
+            mtxp.add_argument("-w", "--workdir", default=None, type=str,
                               help="Full, precise path to an experiment's working directory.")
-            mtxp.add_argument("-b", "--baseDir", action=nauka.ap.BaseDir)
-            argp.add_argument("-d", "--dataDir", action=nauka.ap.DataDir)
-            argp.add_argument("-t", "--tmpDir", action=nauka.ap.TmpDir)
+            mtxp.add_argument("-b", "--basedir", action=nauka.ap.BaseDir)
+            argp.add_argument("-d", "--datadir", action=nauka.ap.DataDir)
+            argp.add_argument("-t", "--tmpdir", action=nauka.ap.TmpDir)
             argp.add_argument("-n", "--name", default=[], type=str, action="append",
                               help="Build a name for the experiment.")
             argp.add_argument("--cuda", action=nauka.ap.CudaDevice)
+            argp.add_argument("--track", action=WandbParse, default="pgm_gan_a19")
+            argp.add_argument("--fastdebug", action=nauka.ap.FastDebug)
+
             argp.add_argument(
                 "-s", "--seed", default='3141592653679', type=str,
                 help="Seed for PRNGs.")
             argp.add_argument(
                 "-es", "--eval-seed", default=None, type=str,
                 help="Frozen seed for PRNGs during evaluation/visualization.")
-            argp.add_argument("--fastdebug", action=nauka.ap.FastDebug)
-
-            argp.add_argument("--train-iters", "-it", default=100000, type=int,
+            argp.add_argument("--train-iters", "-it", default=60000, type=int,
                               help="Number of generator iterations to train for")
             argp.add_argument("--discr-iters", default=1, type=int,
                               help="How many discriminator iterations per generator iteration.")
@@ -435,7 +440,7 @@ class root(nauka.ap.Subcommand):
                 logging.basicConfig(level=logging.INFO)
             elif verbose == 2:
                 logging.basicConfig(level=logging.DEBUG)
-            return TwoDExperiment(a).rollback().run().animate().exitcode
+            return GAN2D(a).rollback().run().animate().exitcode
 
 
 def main(argv=sys.argv):

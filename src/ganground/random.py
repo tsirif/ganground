@@ -119,15 +119,6 @@ class MathPRNG(AbstractPRNG):
         self.random.setstate(state_)
 
 
-def _getIntFromPBKDF2(nbits, password, salt="",
-                      rounds=1, hash="sha256", signed=False):
-    nbits = int(nbits)
-    assert nbits % 8 == 0
-    dkLen = nbits // 8
-    buf = _pbkdf2(dkLen, password, salt, rounds, hash)
-    return int.from_bytes(buf, "little", signed=signed)
-
-
 class TorchPRNG(AbstractPRNG):
     import torch
 

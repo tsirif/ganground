@@ -10,21 +10,20 @@ r"""
 """
 import logging
 import os
-import copy
 
 import torch
 
 from ganground.utils import SingletonType
 from nauka.utils import PlainObject
-from ganground.tracking import Wandb
 
 logger = logging.getLogger(__name__)
 
 
 class State(object, metaclass=SingletonType):
 
-    def __init__(self, name, project, args):
+    def __init__(self, name, project, args, hyperparams):
         self.args = args
+        self.hyperparams = hyperparams  # TODO
 
         # Training components management
         self._modules = dict()
@@ -59,15 +58,13 @@ class State(object, metaclass=SingletonType):
             logger.info("Initialized distributed training with world size: %d",
                         self.info.world_size)
 
-        '''
-        # Visualization management
-        # deepcopy of args
-        # throw away args that we don't want
-        # call wandb init
-        # call wandb config
-        '''
-        self.tracking = Wandb(name=name, id=name, project=project)
-        self.tracking.set_config(copy.deepcopy(args))
+    @property
+    def modules(self):
+        return tuple(self._modules.values())
+
+    @property
+    def optimizers(self):
+        return tuple(self._optimizers.values())
 
     @property
     def is_master_rank(self):
@@ -97,8 +94,8 @@ class State(object, metaclass=SingletonType):
 
     def register_module(self, module):
         from ganground.nn import Module
-        if module.name in self._modules:
-            module_ = self._modules[module.name]
+        module_ = self._modules.get(module.name)
+        if module_ is not None:
             if not isinstance(module_, Module):
                 module.load_state_dict(module_)
             else:
@@ -109,8 +106,8 @@ class State(object, metaclass=SingletonType):
 
     def register_optimizer(self, trainable):
         from ganground.optim import Trainable
-        if trainable.name in self._optimizers:
-            optimizer_ = self._optimizers[trainable.name]
+        optimizer_ = self._optimizers.get(trainable.name)
+        if optimizer_ is not None:
             if not isinstance(optimizer_, Trainable):
                 trainable.optimizer.load_state_dict(optimizer_)
             else:
@@ -136,9 +133,6 @@ class State(object, metaclass=SingletonType):
         state.args = self.args
         torch.save(state, pytorch_path)
 
-        # wandb save
-        self.tracking.save()
-
     def load(self, path):
         pytorch_path = os.path.join(path, "snapshot.pkl")
         state = torch.load(pytorch_path)
@@ -149,14 +143,9 @@ class State(object, metaclass=SingletonType):
         assert(self.info.world_size == state.info.world_size)
         self.info = state.info
 
-        # wandb restore
-        self.tracking.restore()
-
     def log_setting(self):
         logger.info("Models:\n%s", self._modules)
         logger.info("Optimizers:\n%s", self._optimizers)
-        logger.info("Info:\n%s", self.info.__dict__)
-        logger.info("Args:\n%s", self.args.__dict__)
-
-    def watch(self):
-        self.tracking.watch(tuple(self._modules.values()))
+        logger.info("Info:\n%s", vars(self.info))
+        logger.info("Args:\n%s", self.args)
+        logger.info("Hyperparameters:\n%s", self.hyperparams)

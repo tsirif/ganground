@@ -53,9 +53,9 @@ class Metric(Trainable):
         with self.optimizer_step as opt:
             assert(opt is not None)  # Calling `separate` implies a critic model
             metric = self.estimate(obj_type, **obj_kwargs)
-            # TODO wandb log (step=State().info.iter)
             loss = - metric  # Separation means "maximization" of the metric
             loss.backward()
+        return metric.detach()
 
     def minimize(self, obj_type: str, **obj_kwargs):
         self.requires_grad_(False)
@@ -65,5 +65,5 @@ class Metric(Trainable):
             assert(calcpp or calcqq)
             loss = self.loss(obj_type,
                              calcpp=calcpp, calcqq=calcqq, **obj_kwargs)
-            # TODO wandb log (step=State().info.iter)
             loss.backward()
+        return loss.detach()

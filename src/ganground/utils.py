@@ -11,13 +11,9 @@
 from abc import ABCMeta
 from glob import glob
 from importlib import import_module
-import logging
 import os
 
 import pkg_resources
-
-
-log = logging.getLogger(__name__)
 
 
 class SingletonError(ValueError):
@@ -93,9 +89,6 @@ class Factory(ABCMeta):
         # Get types advertised through entry points!
         for entry_point in pkg_resources.iter_entry_points(cls.__name__):
             entry_point.load()
-            log.debug("Found a %s %s from distribution: %s=%s",
-                      entry_point.name, cls.__name__,
-                      entry_point.dist.project_name, entry_point.dist.version)
 
         cls.find_types()
 
@@ -103,7 +96,6 @@ class Factory(ABCMeta):
         cls.types = list(get_all_subclasses(cls.__base__))
         cls.types = {class_.__name__: class_
                      for class_ in cls.types if class_.__name__ != cls.__name__}
-        log.debug("Implementations found: %s", tuple(cls.types.keys()))
 
     def __call__(cls, of_type, *args, **kwargs):
         """Create an object, instance of ``cls.__base__``, on first call.

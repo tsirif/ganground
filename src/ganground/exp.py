@@ -9,17 +9,42 @@ r"""
 
 """
 from abc import (abstractmethod, abstractproperty, ABCMeta)
+import argparse
+import binascii
+import copy
+import json
 import logging
 import os
 
 import nauka
 
 
-from ganground.random import PRNG
+from ganground.random import (PRNG, _pbkdf2)
 from ganground.state import State
+from ganground.tracking import Wandb
 
 
 logger = logging.getLogger(__name__)
+
+
+def nested_ns_to_dict(ns):
+    ns = copy.copy(vars(ns))
+    nsd = {k: nested_ns_to_dict(v) for k, v in ns.items()
+           if isinstance(v, argparse.Namespace)}
+    ns.update(nsd)
+    return ns
+
+
+def flatten_ns_to_dict(ns):
+    nsd = dict()
+    stack = list(vars(ns).items())
+    while stack:
+        k, v = stack.pop()
+        if isinstance(v, argparse.Namespace):
+            stack.extend([(k + '.' + k_, v_) for k_, v_ in vars(v).items()])
+        else:
+            nsd[k] = v
+    return nsd
 
 
 class ExperimentInterface(object, metaclass=ABCMeta):
@@ -106,15 +131,38 @@ class Experiment(nauka.exp.Experiment, ExperimentInterface):
         args.__dict__.pop("__cls__", None)
         self.args = args
         # This is the time where state is created!
-        self.state = State(self.name, self.__class__.__name__, args)
-        if args.workDir:
-            super(Experiment, self).__init__(args.workDir)
+        self.state = State(self.name, self.__class__.__name__,
+                           args, self.hyperparams)
+        if args.workdir:
+            super(Experiment, self).__init__(args.workdir)
         else:
-            super(Experiment, self).__init__(os.path.join(args.baseDir,
+            super(Experiment, self).__init__(os.path.join(args.basedir,
                                                           self.__class__.__name__,
                                                           self.name))
         self.mkdirp(self.logdir)
         logger.info("Initializing experiment with name: {}".format(self.name))
+
+        self.tracking = Wandb(args.track.key, args.track.entity,
+                              project=self.__class__.__name__,
+                              name=self.name,
+                              config=flatten_ns_to_dict(self.state.hyperparams),
+                              id=self.hash(),
+                              dir=self.workdir,
+                              )
+
+    @property
+    def hyperparams(self):
+        args = copy.deepcopy(self.args)
+        del args.verbose
+        del args.workdir
+        del args.basedir
+        del args.datadir
+        del args.tmpdir
+        del args.name
+        del args.cuda
+        del args.track
+        del args.fastdebug
+        return args
 
     @property
     def info(self):
@@ -143,16 +191,30 @@ class Experiment(nauka.exp.Experiment, ExperimentInterface):
     @property
     def datadir(self):
         """Returns the root directory where datasets reside."""
-        return self.args.dataDir
+        return self.args.datadir
+
+    @property
+    def workdir(self):
+        return self.workDir
 
     @property
     def logdir(self):
         """Return the directory where experiment log will reside."""
-        return os.path.join(self.workDir, "logs")
+        return os.path.join(self.workdir, "logs")
 
     @property
     def exitcode(self):
         return 0 if self.is_done else 1
+
+    def hash(self, length=32):
+        hparams = nested_ns_to_dict(self.hyperparams)
+        s = _pbkdf2(length,
+                    json.dumps(hparams, sort_keys=True),
+                    salt="hyperparameters", rounds=100001)
+        return binascii.hexlify(s).decode('utf-8', errors='strict')
+
+    def log(self, **kwargs):
+        self.tracking.log(kwargs, step=self.iter)
 
     def dump(self, path):
         """Dump state to the directory `path`
@@ -186,8 +248,9 @@ class Experiment(nauka.exp.Experiment, ExperimentInterface):
         """Start a fresh experiment, from scratch."""
         password = "Seed: {} Init".format(self.args.seed)
         PRNG.seed(password)
+        self.tracking.init()
         self.define()
-        self.state.watch()
+        self.tracking.watch(self.state.modules)
         return self
 
     def fromSnapshot(self, path):
