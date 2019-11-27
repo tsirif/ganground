@@ -28,6 +28,7 @@ install_requires = [
     'scikit-learn',
     'imageio',
     'imageio-ffmpeg',
+    'wandb',
     ]
 
 packages = [

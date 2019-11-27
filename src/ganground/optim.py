@@ -44,7 +44,6 @@ class Trainable(object):
         def __enter__(self):
             if self.optimizer is None:
                 return
-            self.trainable.train()
             self.trainable.requires_grad_(True)
             self.optimizer.zero_grad()
             return self.optimizer

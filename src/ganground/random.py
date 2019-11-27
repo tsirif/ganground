@@ -86,7 +86,6 @@ class NumpyPRNG(AbstractPRNG):
     def seed(self, password):
         state_ = self.get_random_state(password, salt="numpy.random")
         self.state = state_
-        return state_
 
     @property
     def state(self):
@@ -108,7 +107,6 @@ class MathPRNG(AbstractPRNG):
     def seed(self, password):
         state_ = self.get_random_state(password, salt="random")
         self.state = state_
-        return state_
 
     @property
     def state(self):
@@ -129,7 +127,6 @@ class TorchPRNG(AbstractPRNG):
     def seed(self, password):
         seed = self.get_random_state(password, salt="torch.random")
         self.torch.random.manual_seed(seed)
-        return self.state
 
     @property
     def state(self):
@@ -147,19 +144,18 @@ class TorchCudaPRNG(TorchPRNG):
             return
         seed = self.get_random_state(password, salt="torch.cuda")
         self.torch.cuda.manual_seed(seed)
-        return self.state
 
     @property
     def state(self):
         if not State().is_cuda:
             return
-        return self.torch.cuda.get_rng_state()
+        return self.torch.cuda.get_rng_state(device=State().device)
 
     @state.setter
     def state(self, state_):
         if not State().is_cuda:
             return
-        self.torch.cuda.set_rng_state(state_)
+        self.torch.cuda.set_rng_state(state_, device=State().device)
 
 
 class PRNG(AbstractPRNG, metaclass=SingletonFactory):

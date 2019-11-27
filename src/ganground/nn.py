@@ -46,10 +46,6 @@ class Module(torch.nn.Module):
         super(Module, self).__init__(*args, **kwargs)
         self.name = name
 
-        state = State()
-        if state.is_cuda:
-            self.cuda(device=state.device)
-        else:
-            self.cpu()
-
-        self.apply(weights_init)
+    def finalize_init(self):
+        # FIXME self.apply(weights_init)
+        self.to(device=State().device)

@@ -208,6 +208,7 @@ class Experiment(nauka.exp.Experiment, ExperimentInterface):
 
     def hash(self, length=32):
         hparams = nested_ns_to_dict(self.hyperparams)
+        hparams['mingle'] = self.args.name
         s = _pbkdf2(length,
                     json.dumps(hparams, sort_keys=True),
                     salt="hyperparameters", rounds=100001)

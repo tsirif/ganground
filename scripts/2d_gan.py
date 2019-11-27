@@ -13,13 +13,12 @@ import numpy as np
 import torch
 from torch import nn
 from torch.nn import functional as F
-import torch.autograd as autograd
 
 from ganground.data import Dataset
 from ganground.nn import Module
 from ganground.exp import Experiment
 from ganground.measure import (Measure, EmpiricalMeasure, InducedMeasure)
-from ganground.metric import Metric
+from ganground.metric import (Metric, Objective)
 from ganground.metric.kernel import (mmd2, AbstractKernel,
                                      cross_mean_kernel_wrap,
                                      _pairwise_dist)
@@ -38,7 +37,7 @@ FIG_X_SIZE_IN = 12
 FIG_Y_SIZE_IN = 12
 DPI = 96
 FPS = 10
-CMAP_DIVERGING = mpl.cm.seismic
+CMAP_DIVERGING = mpl.cm.bwr
 CMAP_SEQUENTIAL = mpl.cm.plasma
 plt.rc('font', size=SMALL_SIZE)          # controls default text sizes
 plt.rc('axes', titlesize=SMALL_SIZE)     # fontsize of the axes title
@@ -83,7 +82,7 @@ class Generator(Module):
         self.nonlinearity = 'ReLU'
 
         DIM = args.model_width
-        main = nn.Sequential(
+        gener = nn.Sequential(
             nn.Linear(2, DIM),
             nn.ReLU(inplace=True),
             nn.Linear(DIM, DIM),
@@ -92,10 +91,11 @@ class Generator(Module):
             nn.ReLU(inplace=True),
             nn.Linear(DIM, 2),
         )
-        self.main = main
+        self.gener = gener
+        self.finalize_init()
 
     def forward(self, noise):
-        return self.main(noise)
+        return self.gener(noise)
 
 
 class Discriminator(Module):
@@ -118,7 +118,7 @@ class Discriminator(Module):
                 'Not supported nonlinearity for critic: {}'.format(self.nonlinearity))
 
         DIM = args.model_width
-        main = nn.Sequential(
+        critic = nn.Sequential(
             Linear(2, DIM),
             nonlin(inplace=True),
             Linear(DIM, DIM),
@@ -126,11 +126,12 @@ class Discriminator(Module):
             Linear(DIM, DIM),
             nonlin(inplace=True),
         )
-        self.main = main
-        self.output = Linear(DIM, 1, bias=(not args.no_critic_last_bias))
+        self.critic = critic
+        self.critic_output = Linear(DIM, 1, bias=(not args.no_critic_last_bias))
+        self.finalize_init()
 
     def forward(self, inputs):
-        return self.output(self.main(inputs))
+        return self.critic_output(self.critic(inputs))
 
 
 class GAN2D(Experiment):
@@ -184,7 +185,7 @@ class GAN2D(Experiment):
         self.dataset = Dataset(self.args.dataset,  # type
                                self.datadir,
                                splits=(9, 1),  # 9/10 train, 1/10 eval
-                               size=1000)  # 90000 for train, 10000 for eval
+                               size=100000)  # 90000 for train, 10000 for eval
 
         # Create networks
         self.generator = Generator('gener', self.args)
@@ -203,11 +204,17 @@ class GAN2D(Experiment):
         self.metric = Metric('discr', self.P, self.Q, self.critic,
                              spec=self.args.d_opt)
 
+        self.metric.eval()
+        self.Q.eval()
         with PRNG.reseed(self.args.eval_seed):
-            self.visualize()
+            mmd_mean, mmd_std = self.visualize()
+            self.log(**{'eval mmd mean (×1e3)': mmd_mean})
+            self.log(**{'eval mmd std (×1e3)': mmd_std})
 
     def execute(self):
         # Training
+        self.metric.train()
+        self.Q.train()
         metric_summary = []
         loss_summary = []
         for _ in range(self.args.train_period):
@@ -235,6 +242,8 @@ class GAN2D(Experiment):
         self.log(**{'generator loss': torch.cat(loss_summary).mean()})
 
         # Evaluation and Visualization
+        self.metric.eval()
+        self.Q.eval()
         with PRNG.reseed(self.args.eval_seed):
             mmd_mean, mmd_std = self.visualize()
             self.log(**{'eval mmd mean (×1e3)': mmd_mean})
@@ -245,9 +254,6 @@ class GAN2D(Experiment):
         visualize them in a 2D plot along with contours of the discriminator,
         the norm of its gradient, and the target empirical distribution.
         """
-        self.metric.eval()
-        self.Q.eval()
-
         target_dist = []
         samples = []
         block_stats = []
@@ -258,7 +264,6 @@ class GAN2D(Experiment):
                 while cy.size(0) < cx.size(0):
                     cy = torch.cat([cy, self.Q.sample()])
             cy = cy[:cx.size(0)]
-            logger.debug("len(cx)=%d , len(cy)=%d", len(cx), len(cy))
 
             target_dist.append(cx)
             samples.append(cy)
@@ -287,23 +292,16 @@ class GAN2D(Experiment):
         self.metric.requires_grad_()
         outs = self.critic(points)
         disc_map = torch.sigmoid(-outs).detach().cpu().numpy().squeeze()
-        gradient = autograd.grad(
-            outputs=outs,
-            inputs=points,
-            grad_outputs=torch.ones_like(outs),
-            create_graph=False, retain_graph=False, only_inputs=True)[0]
-        norm_grad_disc_map = gradient.norm(2, dim=2).cpu().numpy().squeeze()
 
         bot, top = Xspace[0], Xspace[-1]
         background = ax.imshow(disc_map, cmap=CMAP_DIVERGING,
                                vmin=0, vmax=1,
-                               alpha=0.4, interpolation='lanczos',
+                               alpha=0.3, interpolation='lanczos',
                                extent=(bot, top, bot, top), origin='lower')
-        CS = ax.contour(norm_grad_disc_map, cmap=CMAP_SEQUENTIAL, alpha=0.25,
+        CS = ax.contour(disc_map, cmap=CMAP_SEQUENTIAL, alpha=0.25,
                         extent=(bot, top, bot, top), origin='lower')
         #  ax.clabel(CS, inline=True, fmt='%.3f',
         #            colors='black', fontsize=MEDIUM_SIZE)
-
         #  fig.colorbar(background, ax=ax, format='%.3f',
         #               shrink=0.85, pad=0.02, aspect=40)
 
@@ -378,7 +376,7 @@ class root(nauka.ap.Subcommand):
                 "-s", "--seed", default='0x6a09e667f3bcc908', type=str,
                 help="Seed for PRNGs. Default is 64-bit fractional expansion of sqrt(2).")
             argp.add_argument(
-                "-es", "--eval-seed", default=None, type=str,
+                "-es", "--eval-seed", default='pi=3.14159', type=str,
                 help="Frozen seed for PRNGs during evaluation/visualization.")
             argp.add_argument("--train-iters", "-it", default=10000, type=int,
                               help="Number of generator iterations to train for")
@@ -404,8 +402,7 @@ class root(nauka.ap.Subcommand):
             taskp = argp.add_argument_group(
                 "Task", "Variations on the task to be solved.")
             taskp.add_argument("--dataset", default="g8_2d", type=str,
-                               choices=tuple(Dataset.types.keys()),
-                               help="Dataset Selection.")
+                               help="Dataset Selection: " + str(tuple(Dataset.types.keys())))
 
             modelp = argp.add_argument_group(
                 "Architecture", "Tunables in Deep Neural Network architecture"
@@ -418,8 +415,7 @@ class root(nauka.ap.Subcommand):
             modelp.add_argument("--no-critic-last-bias", '-nclb', action='store_true', default=False,
                                 help="Disable output layer's bias.")
             modelp.add_argument("--obj-type", default='jsd', type=str,
-                                #  choices=DISCRIMINATOR_OBJECTIVES,
-                                help="Type of advesarial objective function.")
+                                help="Type of advesarial objective function: " + str(Objective.types.keys()))
             modelp.add_argument("--nonsat", action='store_true', default=False,
                                 help="Use non-saturating version for `--obj-type`, if available.")
             modelp.add_argument("--p2neg", action='store_true', default=False,

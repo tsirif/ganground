@@ -114,7 +114,7 @@ class AbstractDataset(object, metaclass=ABCMeta):
     def infinite_sampler(self, name: str, batch_size: int, split=0):
         fetch_stream = None
         if self.state.is_cuda:
-            fetch_stream = torch.cuda.stream()
+            fetch_stream = torch.cuda.Stream()
         batches_seen = self.state.samplers(name)  # TODO
         sampler = MultiEpochSampler(self.data[split],
                                     batches_seen,
