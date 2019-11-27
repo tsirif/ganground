@@ -161,6 +161,13 @@ class GAN2D(Experiment):
 
         default_name += '-d'
         default_name += self.args.d_opt.name
+        if self.args.d_opt.name == 'sgd':
+            default_name += '({:.4f},{:.3f})'.format(self.args.d_opt.lr,
+                                                     self.args.d_opt.mom)
+        elif self.args.d_opt.name == 'adam':
+            default_name += '({:.4f},{:.3f},{:.3f})'.format(self.args.d_opt.lr,
+                                                            self.args.d_opt.beta1,
+                                                            self.args.d_opt.beta2)
         if self.args.sn:
             default_name += "-SN"
         #  if self.args.gp:
@@ -168,6 +175,13 @@ class GAN2D(Experiment):
 
         default_name += '-g'
         default_name += self.args.g_opt.name
+        if self.args.g_opt.name == 'sgd':
+            default_name += '({:.4f},{:.3f})'.format(self.args.g_opt.lr,
+                                                     self.args.g_opt.mom)
+        elif self.args.g_opt.name == 'adam':
+            default_name += '({:.4f},{:.3f},{:.3f})'.format(self.args.g_opt.lr,
+                                                            self.args.g_opt.beta1,
+                                                            self.args.g_opt.beta2)
         if self.args.g_ema:
             default_name += "-ema({:.3f})".format(self.args.g_ema)
 
