@@ -14,7 +14,7 @@ sys.path.insert(0, pjoin(repo_root, 'src'))
 print(sys.version)
 
 import versioneer  # noqa
-import ganground  # noqa
+from ganground import _version_info as info  # noqa
 
 # Commenting out some requirements because it is better to leave the exact
 # installation process for those packages up to the user.
@@ -38,15 +38,15 @@ packages = [
     ]
 
 setup_args = dict(
-    name=ganground.__name__,
+    name='ganground',
     version=versioneer.get_version(),
     cmdclass=versioneer.get_cmdclass(),
-    description=ganground.__descr__,
+    description=info.__descr__,
     long_description=open(pjoin(repo_root, 'README.rst')).read(),
-    license=ganground.__license__,
-    author=ganground.__author__,
-    author_email=ganground.__author_email__,
-    url=ganground.__url__,
+    license=info.__license__,
+    author=info.__author__,
+    author_email=info.__author_email__,
+    url=info.__url__,
     packages=packages,
     package_dir={'': 'src'},
     include_package_data=True,

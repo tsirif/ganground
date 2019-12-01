@@ -14,10 +14,13 @@ import os
 import numpy
 import torch
 
-from ganground.data.utils import MultiEpochSampler
 from ganground.utils import Factory
 from ganground.random import PRNG
 from ganground.state import State
+
+from ganground.data.utils import MultiEpochSampler
+
+__all__ = ['AbstractDataset', 'Dataset']
 
 
 def _worker_init_fn(worker_id):

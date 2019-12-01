@@ -8,37 +8,40 @@ r"""
    :synopsis: It implements an interface to WandB to log experiment data
 
 """
-import logging
-import os
-
 from argparse import (Action, Namespace)
+import logging
+
 import wandb
 
 from ganground.utils import SingletonType
 from ganground.state import State
 
-
 logger = logging.getLogger(__name__)
+__all__ = ['WandbAction', 'Wandb']
 
 
-class WandbParse(Action):
+class WandbAction(Action):
 
     def __init__(self, **kwargs):
-        default = kwargs.get("default", '')
-        kwargs["default"] = Namespace(**self.parse_string(default))
-        kwargs["metavar"] = "ENTITY(:KEY)"
-        kwargs["nargs"] = None
-        kwargs["type"] = str
-        kwargs.setdefault("help", "WandB entity of the project and user's API key.")
-        super().__init__(**kwargs)
+        kwargs['dest'] = 'tracking'
+        default = kwargs.get('default', '')
+        kwargs['default'] = Namespace(**self.parse_string(default))
+        kwargs['metavar'] = '(ENTITY(:KEY))|(None)'
+        kwargs['nargs'] = None
+        kwargs['type'] = str
+        kwargs.setdefault('help', "WandB entity of the project and user's API key.")
+        super(WandbAction, self).__init__(**kwargs)
 
     def __call__(self, parser, ns, values, option_string):
-        setattr(ns, self.dest, Namespace(**self.parse_string(values)))
+        parsed = self.parse_string(values)
+        setattr(ns, self.dest, Namespace(**parsed) if parsed is not None else None)
 
     @classmethod
     def parse_string(cls, string):
         if not string:
             return dict(key=None, entity=None)
+        if string in ('None', 'none', 'No', 'no', 'False', 'false', 'N', 'n'):
+            return None
         split = string.split(':', 1)
         entity = split[0]
         key = split[1] if len(split) == 2 else None

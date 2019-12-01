@@ -17,8 +17,13 @@ import torch.nn.functional as F
 
 from ganground.utils import (AbstractSingletonType, SingletonFactory)
 
-
 logger = logging.getLogger(__name__)
+__all__ = [
+    'mmd2', 'cross_mean_kernel_wrap',
+    '_pairwise_dot', '_pairwise_dist', '_pairwise_pow_dist',
+    'AbstractKernel', 'Kernel', 'Gaussian', 'Laplacian', 'Exp',
+    'Linear', 'Poly', 'Tanh', 'IMQ'
+]
 
 
 def mmd2(PPk, QQk, PQk):
@@ -36,42 +41,32 @@ def mmd2(PPk, QQk, PQk):
     assert(PQk is not None)
     # Allow `PPk` to be None, if we want to compute mmd2 for the generator
     if PPk is None:
-        logger.debug("No PPk is given.")
         PPk_ = 0
     elif len(PPk.shape) == 2:
-        logger.debug("Matrix PPk is given.")
         m = PPk.size(0)
         PPk_ = (PPk.sum() - PPk.trace()) / (m**2 - m) if m != 1 else 0
     elif len(PPk.shape) == 1:
-        logger.debug("Vector PPk is given.")
         PPk_ = PPk.mean()
     elif len(PPk.shape) == 0:
-        logger.debug("Scalar PPk is given (assumed to contain average).")
         PPk_ = PPk
     else:
         raise ValueError("Not supported `PPk`.")
 
     if QQk is None:
-        logger.debug("No QQk is given.")
         QQk_ = 0
     elif len(QQk.shape) == 2:
-        logger.debug("Matrix QQk is given.")
         n = QQk.size(0)
         QQk_ = (QQk.sum() - QQk.trace()) / (n**2 - n) if n != 1 else 0
     elif len(QQk.shape) == 1:
-        logger.debug("Vector QQk is given.")
         QQk_ = QQk.mean()
     elif len(QQk.shape) == 0:
-        logger.debug("Scalar QQk is given (assumed to contain average).")
         QQk_ = QQk
     else:
         raise ValueError("Not supported `QQk`.")
 
     if PQk.size():
-        logger.debug("Matrix/Vector PQk is given.")
         PQk_ = PQk.mean()
     else:
-        logger.debug("Scalar PQk is given (assumed to contain average).")
         PQk_ = PQk
 
     return PPk_ + QQk_ - 2 * PQk_
@@ -105,7 +100,7 @@ def cross_mean_kernel_wrap(kernel_fn, calcpp=True, calcqq=True,
         n = cq.size(0)
         cp_cq_len = m + n
         if try_pdist:
-            logger.debug("Using pytorch.pdist with concatenation to calc cross means.")
+            #  logger.debug("Using pytorch.pdist with concatenation to calc cross means.")
             # It will use F.pdist to calculate cpp, cpq, and cqq
             cp_cq = torch.cat((cp, cq), dim=0).contiguous()
             res_type = cp_cq.dtype
@@ -137,7 +132,7 @@ def cross_mean_kernel_wrap(kernel_fn, calcpp=True, calcqq=True,
             cpq = mask.mul_(res).sum().div_(n).to(res_type)
 
         else:
-            logger.debug("Invoking three times the kernel to calc cross means.")
+            #  logger.debug("Invoking three times the kernel to calc cross means.")
             if calcpp:
                 cpp = kernel_fn(cp, cp, **kernel_args)
             else:
@@ -173,12 +168,12 @@ def _pairwise_dist(cx, cy, p=2, _pow_flag=False):
     cx_eq_cy = _are_equal(cx, cy)
 
     if cx_eq_cy:
-        logger.debug("Calc pairwise distance with pytorch.pdist.")
+        #  logger.debug("Calc pairwise distance with pytorch.pdist.")
         # Calculate only triangular, fast, cheaper, stable. Looks like this:
         # torch.cat([torch.full((n - i - 1,), i, dtype=torch.int64) for i in range(n)])
         res = F.pdist(cx.view(m, -1), p=p)
     elif p == 2 and m * n * imsize * (torch.finfo(cx.dtype).bits // 8) > 4 * 1024**2:
-        logger.debug("Calc pairwise distance with quadratic expansion.")
+        #  logger.debug("Calc pairwise distance with quadratic expansion.")
         # If more than 4MB needed to repr a full matrix
         # Faster and cheaper, but less stable (quadratic expansion)
         # Still slower than the first choice
@@ -200,7 +195,7 @@ def _pairwise_dist(cx, cy, p=2, _pow_flag=False):
         else:
             res = res.sqrt()
     else:
-        logger.debug("Calc pairwise distance with naive broadcasting.")
+        #  logger.debug("Calc pairwise distance with naive broadcasting.")
         # More expensive - Θ(n^2 d), but numerically more stable
         cx_ = cx.view(m, 1, -1)
         cy_ = cy.view(1, n, -1)

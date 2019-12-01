@@ -34,7 +34,7 @@ class _Synthetic(AbstractDataset):
         pass
 
 
-class G25_2D(_Synthetic):
+class G25(_Synthetic):
     def build(self, size):
         dataset = []
         for _ in range(size // 25):
@@ -49,7 +49,7 @@ class G25_2D(_Synthetic):
         return dataset
 
 
-class G8_2D(_Synthetic):
+class G8(_Synthetic):
     def build(self, size):
         dataset = []
         scale = 2.
@@ -75,7 +75,7 @@ class G8_2D(_Synthetic):
         return dataset
 
 
-class G1_2D(_Synthetic):
+class G1(_Synthetic):
     def build(self, size):
         return numpy.random.randn(size, 2).astype('float32')
 
@@ -90,14 +90,14 @@ class Swissroll(_Synthetic):
         return dataset
 
 
-class C1_2D(_Synthetic):
+class C1(_Synthetic):
     def build(self, size):
         phi = numpy.random.uniform(-numpy.pi, numpy.pi, size)
         dataset = numpy.concatenate([numpy.cos(phi), numpy.sin(phi)]).reshape(2, size).T
         return dataset
 
 
-class C3_2D(_Synthetic):
+class C3(_Synthetic):
     def build(self, size):
         dataset = []
         scale = 0.5
@@ -126,13 +126,13 @@ class Concentric(_Synthetic):
         return numpy.concatenate([radii * numpy.cos(phis), radii * numpy.sin(phis)]).reshape(2, size).T
 
 
-class L1_2D(_Synthetic):
+class L1(_Synthetic):
     def build(self, size, slope=3, y0=1):
         x = numpy.random.uniform(-1, 1, size)
         return numpy.concatenate([x, slope * x + y0]).reshape(2, size).T
 
 
-class L4_2D(_Synthetic):
+class L4(_Synthetic):
     def build(self, size):
         dataset = []
         sets = [(-1.5, -0.5, 1), (-1.5, -0.5, -1), (0.5, 1.5, 1), (0.5, 1.5, -1)]

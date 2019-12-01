@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import logging
 import os
 import sys
 
@@ -14,19 +13,12 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from ganground.data import Dataset
-from ganground.nn import Module
-from ganground.exp import Experiment
-from ganground.measure import (Measure, EmpiricalMeasure, InducedMeasure)
-from ganground.metric import (Metric, Objective)
+import ganground as gg
 from ganground.metric.kernel import (mmd2, AbstractKernel,
                                      cross_mean_kernel_wrap,
                                      _pairwise_dist)
-from ganground.random import PRNG
-from ganground.tracking import WandbParse
 
-
-logger = logging.getLogger(__name__)
+logger = gg.logging.getLogger('GAN2D')
 
 
 # Plot settings
@@ -37,8 +29,8 @@ FIG_X_SIZE_IN = 12
 FIG_Y_SIZE_IN = 12
 DPI = 96
 FPS = 10
-CMAP_DIVERGING = mpl.cm.bwr
-CMAP_SEQUENTIAL = mpl.cm.plasma
+CMAP_DIVERGING = mpl.cm.bwr_r
+CMAP_SEQUENTIAL = mpl.cm.plasma_r
 plt.rc('font', size=SMALL_SIZE)          # controls default text sizes
 plt.rc('axes', titlesize=SMALL_SIZE)     # fontsize of the axes title
 plt.rc('axes', labelsize=MEDIUM_SIZE)    # fontsize of the x and y labels
@@ -65,7 +57,7 @@ class LaplacianMix(AbstractKernel):
 laplacian_mix_kernel = cross_mean_kernel_wrap(LaplacianMix(), try_pdist=True)
 
 
-class Noise(Measure):
+class Noise(gg.Measure):
     def __init__(self, name: str, *args, **kwargs):
         self.name = name
         self.args = args
@@ -75,7 +67,7 @@ class Noise(Measure):
         return torch.randn(*self.args, **self.kwargs)
 
 
-class Generator(Module):
+class Generator(gg.nn.Module):
 
     def __init__(self, name, args):
         super(Generator, self).__init__(name)
@@ -98,7 +90,7 @@ class Generator(Module):
         return self.gener(noise)
 
 
-class Discriminator(Module):
+class Discriminator(gg.nn.Module):
 
     def __init__(self, name, args):
         super(Discriminator, self).__init__(name)
@@ -134,7 +126,7 @@ class Discriminator(Module):
         return self.critic_output(self.critic(inputs))
 
 
-class GAN2D(Experiment):
+class GAN2D(gg.Experiment):
     @property
     def g_d_iters(self):
         diters = 0
@@ -162,24 +154,24 @@ class GAN2D(Experiment):
         default_name += '-d'
         default_name += self.args.d_opt.name
         if self.args.d_opt.name == 'sgd':
-            default_name += '({:.4f},{:.3f})'.format(self.args.d_opt.lr,
+            default_name += '({:.4f},{:.2f})'.format(self.args.d_opt.lr,
                                                      self.args.d_opt.mom)
         elif self.args.d_opt.name == 'adam':
-            default_name += '({:.4f},{:.3f},{:.3f})'.format(self.args.d_opt.lr,
+            default_name += '({:.4f},{:.2f},{:.2f})'.format(self.args.d_opt.lr,
                                                             self.args.d_opt.beta1,
                                                             self.args.d_opt.beta2)
         if self.args.sn:
             default_name += "-SN"
         #  if self.args.gp:
-        #      default_name += "-GP({:.2f})".format(self.args.gp)
+        #      default_name += "-GP({:.3f})".format(self.args.gp)
 
         default_name += '-g'
         default_name += self.args.g_opt.name
         if self.args.g_opt.name == 'sgd':
-            default_name += '({:.4f},{:.3f})'.format(self.args.g_opt.lr,
+            default_name += '({:.4f},{:.2f})'.format(self.args.g_opt.lr,
                                                      self.args.g_opt.mom)
         elif self.args.g_opt.name == 'adam':
-            default_name += '({:.4f},{:.3f},{:.3f})'.format(self.args.g_opt.lr,
+            default_name += '({:.4f},{:.2f},{:.2f})'.format(self.args.g_opt.lr,
                                                             self.args.g_opt.beta1,
                                                             self.args.g_opt.beta2)
         if self.args.g_ema:
@@ -196,31 +188,31 @@ class GAN2D(Experiment):
 
     def define(self):
         # Prepare dataset
-        self.dataset = Dataset(self.args.dataset,  # type
-                               self.datadir,
-                               splits=(9, 1),  # 9/10 train, 1/10 eval
-                               size=100000)  # 90000 for train, 10000 for eval
+        self.dataset = gg.Dataset(self.args.dataset,  # type
+                                  self.datadir,
+                                  splits=(9, 1),  # 9/10 train, 1/10 eval
+                                  size=100000)  # 90000 for train, 10000 for eval
 
         # Create networks
         self.generator = Generator('gener', self.args)
         self.critic = Discriminator('critic', self.args)
 
         # Create measures
-        self.P = EmpiricalMeasure('train_target', self.dataset,
-                                  self.args.batch_size, split=0)
-        self.P_eval = EmpiricalMeasure('eval_target', self.dataset,
-                                       batch_size=1000, split=1)
+        self.P = gg.EmpiricalMeasure('train_target', self.dataset,
+                                     self.args.batch_size, split=0)
+        self.P_eval = gg.EmpiricalMeasure('eval_target', self.dataset,
+                                          batch_size=1000, split=1)
         self.Z = Noise('gaussian', self.args.batch_size, 2, device=self.device)
-        self.Q = InducedMeasure('model', self.generator, self.Z,
-                                spec=self.args.g_opt, ema=self.args.g_ema)
+        self.Q = gg.InducedMeasure('model', self.generator, self.Z,
+                                   spec=self.args.g_opt, ema=self.args.g_ema)
 
         # Create metric
-        self.metric = Metric('discr', self.P, self.Q, self.critic,
-                             spec=self.args.d_opt)
+        self.metric = gg.Metric('discr', self.P, self.Q, self.critic,
+                                spec=self.args.d_opt)
 
         self.metric.eval()
         self.Q.eval()
-        with PRNG.reseed(self.args.eval_seed):
+        with gg.PRNG.reseed(self.args.eval_seed):
             mmd_mean, mmd_std = self.visualize()
             self.log(**{'eval mmd mean (×1e3)': mmd_mean})
             self.log(**{'eval mmd std (×1e3)': mmd_std})
@@ -258,7 +250,7 @@ class GAN2D(Experiment):
         # Evaluation and Visualization
         self.metric.eval()
         self.Q.eval()
-        with PRNG.reseed(self.args.eval_seed):
+        with gg.PRNG.reseed(self.args.eval_seed):
             mmd_mean, mmd_std = self.visualize()
             self.log(**{'eval mmd mean (×1e3)': mmd_mean})
             self.log(**{'eval mmd std (×1e3)': mmd_std})
@@ -302,22 +294,18 @@ class GAN2D(Experiment):
         points = torch.from_numpy(points).float()
         if self.args.cuda:
             points = points.cuda(device=self.device)
-        points.requires_grad_()
-        self.metric.requires_grad_()
         outs = self.critic(points)
-        disc_map = torch.sigmoid(-outs).detach().cpu().numpy().squeeze()
+        disc_map = torch.sigmoid(outs).detach().cpu().numpy().squeeze()
 
         bot, top = Xspace[0], Xspace[-1]
-        background = ax.imshow(disc_map, cmap=CMAP_DIVERGING,
-                               vmin=0, vmax=1,
-                               alpha=0.3, interpolation='lanczos',
-                               extent=(bot, top, bot, top), origin='lower')
-        CS = ax.contour(disc_map, cmap=CMAP_SEQUENTIAL, alpha=0.25,
+        ax.imshow(disc_map, cmap=CMAP_DIVERGING,
+                  vmin=0.45, vmax=0.55,
+                  alpha=0.5, interpolation='lanczos',
+                  extent=(bot, top, bot, top), origin='lower')
+        CS = ax.contour(disc_map, cmap=CMAP_SEQUENTIAL, alpha=0.6,
                         extent=(bot, top, bot, top), origin='lower')
-        #  ax.clabel(CS, inline=True, fmt='%.3f',
-        #            colors='black', fontsize=MEDIUM_SIZE)
-        #  fig.colorbar(background, ax=ax, format='%.3f',
-        #               shrink=0.85, pad=0.02, aspect=40)
+        ax.clabel(CS, inline=True, fmt='%.3f',
+                  colors='black', fontsize=MEDIUM_SIZE)
 
         ax.scatter(*target_dist.cpu().numpy().T, s=1,
                    marker='o', facecolors='none', edgecolors='blue')
@@ -363,10 +351,7 @@ class root(nauka.ap.Subcommand):
     @classmethod
     def addArgs(cls, argp):
         """Add common managerial type arguments in root command."""
-        argp.add_argument(
-            '-v', '--verbose',
-            action='count', default=0,
-            help="logging levels of information about the process (-v: INFO. -vv: DEBUG)")
+        argp.add_argument('-v', action=gg.logging.LogAction)
 
     class train(nauka.ap.Subcommand):
         """Define ``train`` subcommand."""
@@ -375,15 +360,16 @@ class root(nauka.ap.Subcommand):
         def addArgs(cls, argp):
             """Add arguments in ``train`` subcommand."""
             mtxp = argp.add_mutually_exclusive_group()
-            mtxp.add_argument("-w", "--workdir", default=None, type=str,
+            mtxp.add_argument("-work", "--workdir", default=None, type=str,
                               help="Full, precise path to an experiment's working directory.")
-            mtxp.add_argument("-b", "--basedir", action=nauka.ap.BaseDir)
-            argp.add_argument("-d", "--datadir", action=nauka.ap.DataDir)
-            argp.add_argument("-t", "--tmpdir", action=nauka.ap.TmpDir)
+            mtxp.add_argument("-base", "--basedir", action=nauka.ap.BaseDir)
+            argp.add_argument("-data", "--datadir", action=nauka.ap.DataDir)
+            argp.add_argument("-tmp", "--tmpdir", action=nauka.ap.TmpDir)
             argp.add_argument("-n", "--name", default=[], type=str, action="append",
                               help="Build a name for the experiment.")
             argp.add_argument("--cuda", action=nauka.ap.CudaDevice)
-            argp.add_argument("--track", action=WandbParse, default="pgm_gan_a19")
+            argp.add_argument("-t", action=gg.tracking.WandbAction,
+                              default="pgm_gan_a19")
             argp.add_argument("--fastdebug", action=nauka.ap.FastDebug)
 
             argp.add_argument(
@@ -415,8 +401,8 @@ class root(nauka.ap.Subcommand):
 
             taskp = argp.add_argument_group(
                 "Task", "Variations on the task to be solved.")
-            taskp.add_argument("--dataset", default="g8_2d", type=str,
-                               help="Dataset Selection: " + str(tuple(Dataset.types.keys())))
+            taskp.add_argument("--dataset", default="g8", type=str,
+                               help="Dataset Selection: " + str(tuple(gg.Dataset.types.keys())))
 
             modelp = argp.add_argument_group(
                 "Architecture", "Tunables in Deep Neural Network architecture"
@@ -429,7 +415,7 @@ class root(nauka.ap.Subcommand):
             modelp.add_argument("--no-critic-last-bias", '-nclb', action='store_true', default=False,
                                 help="Disable output layer's bias.")
             modelp.add_argument("--obj-type", default='jsd', type=str,
-                                help="Type of advesarial objective function: " + str(Objective.types.keys()))
+                                help="Type of advesarial objective function: " + str(gg.Objective.types.keys()))
             modelp.add_argument("--nonsat", action='store_true', default=False,
                                 help="Use non-saturating version for `--obj-type`, if available.")
             modelp.add_argument("--p2neg", action='store_true', default=False,
@@ -445,11 +431,6 @@ class root(nauka.ap.Subcommand):
 
             :param a: arguments of subcommand, ``train simple``
             """
-            verbose = a.verbose
-            if verbose == 1:
-                logging.basicConfig(level=logging.INFO)
-            elif verbose == 2:
-                logging.basicConfig(level=logging.DEBUG)
             return GAN2D(a).rollback().run().animate().exitcode
 
 

@@ -8,10 +8,15 @@ r"""
    :synopsis: Defines structures helpful for coding with PyTorch
 
 """
+import logging
+
 import torch
 from torch import nn
 
 from ganground.state import State
+
+logger = logging.getLogger(__name__)
+__all__ = ['weights_init', 'Module']
 
 
 def weights_init(m, nonlinearity=None, output_nonlinearity=None):
@@ -44,8 +49,12 @@ class Module(torch.nn.Module):
 
     def __init__(self, name, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
+        logger.debug("Create module '%s'", name)
         self.name = name
 
     def finalize_init(self):
-        # FIXME self.apply(weights_init)
+        logger.debug("Finalize module '%s'", self.name)
+        self.apply(weights_init)
+        State().register_module(self)
         self.to(device=State().device)
+        self.eval()

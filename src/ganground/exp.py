@@ -23,8 +23,8 @@ from ganground.random import (PRNG, _pbkdf2)
 from ganground.state import State
 from ganground.tracking import Wandb
 
-
 logger = logging.getLogger(__name__)
+__all__ = ['Experiment']
 
 
 def nested_ns_to_dict(ns):
@@ -142,25 +142,27 @@ class Experiment(nauka.exp.Experiment, ExperimentInterface):
         self.mkdirp(self.logdir)
         logger.info("Initializing experiment with name: {}".format(self.name))
 
-        self.tracking = Wandb(args.track.key, args.track.entity,
-                              project=self.__class__.__name__,
-                              name=self.name,
-                              config=flatten_ns_to_dict(self.state.hyperparams),
-                              id=self.hash(),
-                              dir=self.workdir,
-                              )
+        self.tracking = None
+        if args.tracking is not None:
+            self.tracking = Wandb(args.tracking.key, args.tracking.entity,
+                                  project=self.__class__.__name__,
+                                  name=self.name,
+                                  config=flatten_ns_to_dict(self.state.hyperparams),
+                                  id=self.hash(),
+                                  dir=self.workdir,
+                                  )
 
     @property
     def hyperparams(self):
         args = copy.deepcopy(self.args)
-        del args.verbose
+        del args.verbosity
         del args.workdir
         del args.basedir
         del args.datadir
         del args.tmpdir
         del args.name
         del args.cuda
-        del args.track
+        del args.tracking
         del args.fastdebug
         return args
 
@@ -215,7 +217,9 @@ class Experiment(nauka.exp.Experiment, ExperimentInterface):
         return binascii.hexlify(s).decode('utf-8', errors='strict')
 
     def log(self, **kwargs):
-        self.tracking.log(kwargs, step=self.iter)
+        logger.debug("Logging (iter=%d): %s", self.iter, kwargs)
+        if self.tracking:
+            self.tracking.log(kwargs, step=self.iter)
 
     def dump(self, path):
         """Dump state to the directory `path`
@@ -249,9 +253,11 @@ class Experiment(nauka.exp.Experiment, ExperimentInterface):
         """Start a fresh experiment, from scratch."""
         password = "Seed: {} Init".format(self.args.seed)
         PRNG.seed(password)
-        self.tracking.init()
+        if self.tracking:
+            self.tracking.init()
         self.define()
-        self.tracking.watch(self.state.modules)
+        if self.tracking:
+            self.tracking.watch(self.state.modules)
         return self
 
     def fromSnapshot(self, path):
