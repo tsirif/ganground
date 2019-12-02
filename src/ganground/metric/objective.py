@@ -9,23 +9,23 @@ r"""
 
 """
 # TODO assertions regarding dimensions of samples in `objectives.py`
-from abc import abstractmethod
 import math
 
 import torch.nn.functional as F
 
+from ganground.metric import AbstractObjective
 from ganground.metric.kernel import (mmd2, cross_mean_kernel_wrap, Kernel)
-from ganground.utils import (AbstractSingletonType, SingletonFactory)
+from ganground.utils import AbstractSingletonType
 
 LOG_2 = math.log(2.)
 __all__ = [
-    'AbstractObjective', 'Objective',
+    'AbstractObjective', 'Objective', 'ObjectiveBuilder', 'ObjectiveAction',
     'JSD', 'GAN', 'W1', 'WGAN', 'RGAN', 'RAGAN', 'MMD2', 'KL', 'KLDV',
     'Hellinger',
 ]
 
 
-class AbstractObjective(object, metaclass=AbstractSingletonType):
+class _MetricObjective(AbstractObjective, metaclass=AbstractSingletonType):
 
     def estimate_measure_loss(self, cp, cq,
                               cp_to_neg=False, nonsat=False,
@@ -41,13 +41,8 @@ class AbstractObjective(object, metaclass=AbstractSingletonType):
 
         return loss
 
-    @abstractmethod
-    def estimate_metric(self, cp, cq, cp_to_neg=False,
-                        calcpp=True, calcqq=True, **obj_kwargs):
-        pass
 
-
-class JSD(AbstractObjective):
+class JSD(_MetricObjective):
 
     def estimate_metric(self, cp, cq, cp_to_neg=False,
                         calcpp=True, calcqq=True, **obj_kwargs):
@@ -63,7 +58,7 @@ class JSD(AbstractObjective):
 class GAN(JSD): pass
 
 
-class W1(AbstractObjective):
+class W1(_MetricObjective):
 
     def estimate_metric(self, cp, cq, cp_to_neg=False,
                         calcpp=True, calcqq=True, **obj_kwargs):
@@ -79,7 +74,7 @@ class W1(AbstractObjective):
 class WGAN(W1): pass
 
 
-class RGAN(AbstractObjective):
+class RGAN(_MetricObjective):
 
     def estimate_metric(self, cp, cq, cp_to_neg=False,
                         calcpp=True, calcqq=True, **obj_kwargs):
@@ -90,7 +85,7 @@ class RGAN(AbstractObjective):
         return metric
 
 
-class RAGAN(AbstractObjective):
+class RAGAN(_MetricObjective):
 
     def estimate_metric(self, cp, cq, cp_to_neg=False,
                         calcpp=True, calcqq=True, **obj_kwargs):
@@ -103,7 +98,7 @@ class RAGAN(AbstractObjective):
         return metric
 
 
-class MMD2(AbstractObjective):
+class MMD2(_MetricObjective):
 
     def estimate_metric(self, cp, cq, cp_to_neg=False,
                         calcpp=True, calcqq=True, kernel='gaussian',
@@ -115,7 +110,7 @@ class MMD2(AbstractObjective):
         return mmd2(*kernel_(cp, cq, **obj_kwargs))
 
 
-class KL(AbstractObjective):
+class KL(_MetricObjective):
     """
     We use the Fenchel Dual formulation to compute this. We compute other representation which is a lower bound on the Dual of KL.
     """
@@ -130,7 +125,7 @@ class KL(AbstractObjective):
         return pos + neg
 
 
-class KLDV(AbstractObjective):
+class KLDV(_MetricObjective):
     """
     We use the Fenchel Dual formulation to compute this. We compute Donsker-Varadhan representation which is a lower bound on the Dual of KL.
     """
@@ -145,7 +140,7 @@ class KLDV(AbstractObjective):
         return pos + neg
 
 
-class Hellinger(AbstractObjective):
+class Hellinger(_MetricObjective):
     """
     We use the Fenchel Dual formulation to compute this.
     """
@@ -160,6 +155,3 @@ class Hellinger(AbstractObjective):
             fenchel_cq = cq/(1 - cq)
             pos = (fenchel_cq).mean() if calcqq else 0
         return pos + neg
-
-
-class Objective(AbstractObjective, metaclass=SingletonFactory): pass

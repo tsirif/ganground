@@ -6,9 +6,9 @@ import pytest
 import numpy as np
 import torch as T
 
-from ganground import kernels
-from ganground.kernels import (mmd2, mmd2_gener, cross_mean_kernel_wrap,
-                               MMD2_OBJ_TYPES, RBF_KERNELS)
+from ganground.metric import kernel
+from ganground.metric.kernel import (mmd2, mmd2_gener, cross_mean_kernel_wrap,
+                                     MMD2_OBJ_TYPES, RBF_KERNELS)
 
 
 def torch_assert_alltrue(cond):
@@ -50,7 +50,7 @@ class TestPairwiseDot(object):
         X, Y, X_np, Y_np, mean, std = X_Y_samples
         size = len(X)
 
-        XY = kernels._pairwise_dot(X, Y)
+        XY = kernel._pairwise_dot(X, Y)
 
         XY_np = np.sum(X_np.reshape(size, 1, -1) * Y_np.reshape(1, size, -1),
                        axis=-1)
@@ -60,7 +60,7 @@ class TestPairwiseDot(object):
     def test_pairwise_dot_diff_args_backward(self, X_Y_samples):
         X, Y, X_np, Y_np, mean, std = X_Y_samples
 
-        XY = kernels._pairwise_dot(X, Y)
+        XY = kernel._pairwise_dot(X, Y)
 
         XY.mean().backward()
         np.testing.assert_allclose(mean.grad.detach().cpu().numpy(), -1,
@@ -70,7 +70,7 @@ class TestPairwiseDot(object):
         X, Y, X_np, Y_np, mean, std = X_Y_samples
         size = len(X)
 
-        XX = kernels._pairwise_dot(X, X)
+        XX = kernel._pairwise_dot(X, X)
 
         XX_np = np.sum(X_np.reshape(size, 1, -1) * X_np.reshape(1, size, -1),
                        axis=-1)
@@ -80,7 +80,7 @@ class TestPairwiseDot(object):
     def test_pairwise_dot_same_args_backward(self, X_Y_samples):
         X, Y, X_np, Y_np, mean, std = X_Y_samples
 
-        XX = kernels._pairwise_dot(X, X)
+        XX = kernel._pairwise_dot(X, X)
 
         XX.mean().backward()
         torch_assert_alltrue(mean.grad > 0)
@@ -93,7 +93,7 @@ class TestPairwiseDist(object):
         X, Y, X_np, Y_np, mean, std = X_Y_samples
         size = len(X)
 
-        XY = kernels._pairwise_dist(X, Y, p=p)
+        XY = kernel._pairwise_dist(X, Y, p=p)
 
         XY_np = np.sum(np.power(np.abs(X_np.reshape(size, 1, -1) - Y_np.reshape(1, size, -1)), p),
                        axis=-1) ** (1./p)
@@ -103,7 +103,7 @@ class TestPairwiseDist(object):
     def test_pairwise_dist_diff_args_backward(self, X_Y_samples, p):
         X, Y, X_np, Y_np, mean, std = X_Y_samples
 
-        XY = kernels._pairwise_dist(X, Y, p=p)
+        XY = kernel._pairwise_dist(X, Y, p=p)
 
         XY.mean().backward()
         np.testing.assert_allclose(mean.grad.detach().cpu().numpy(), 1,
@@ -113,7 +113,7 @@ class TestPairwiseDist(object):
         X, Y, X_np, Y_np, mean, std = X_Y_samples
         size = len(X)
 
-        XX = kernels._pairwise_dist(X, X, p=p)
+        XX = kernel._pairwise_dist(X, X, p=p)
 
         XX_np = np.sum(np.power(np.abs(X_np.reshape(size, 1, -1) - X_np.reshape(1, size, -1)), p),
                        axis=-1) ** (1./p)
@@ -124,7 +124,7 @@ class TestPairwiseDist(object):
     def test_pairwise_dist_same_args_backward(self, X_Y_samples, p):
         X, Y, X_np, Y_np, mean, std = X_Y_samples
 
-        XX = kernels._pairwise_dist(X, X, p=p)
+        XX = kernel._pairwise_dist(X, X, p=p)
 
         XX.mean().backward()
         np.testing.assert_allclose(mean.grad.detach().cpu().numpy(), 0,
@@ -138,7 +138,7 @@ class TestPairwisePowDist(object):
         X, Y, X_np, Y_np, mean, std = X_Y_samples
         size = len(X)
 
-        XY = kernels._pairwise_pow_dist(X, Y, p=p)
+        XY = kernel._pairwise_pow_dist(X, Y, p=p)
 
         XY_np = np.sum(np.power(np.abs(X_np.reshape(size, 1, -1) - Y_np.reshape(1, size, -1)), p),
                        axis=-1)
@@ -148,7 +148,7 @@ class TestPairwisePowDist(object):
     def test_pairwise_pow_dist_diff_args_backward(self, X_Y_samples, p):
         X, Y, X_np, Y_np, mean, std = X_Y_samples
 
-        XY = kernels._pairwise_pow_dist(X, Y, p=p)
+        XY = kernel._pairwise_pow_dist(X, Y, p=p)
 
         XY.mean().backward()
         torch_assert_alltrue(mean.grad > 0)
@@ -157,7 +157,7 @@ class TestPairwisePowDist(object):
         X, Y, X_np, Y_np, mean, std = X_Y_samples
         size = len(X)
 
-        XX = kernels._pairwise_pow_dist(X, X, p=p)
+        XX = kernel._pairwise_pow_dist(X, X, p=p)
 
         XX_np = np.sum(np.power(np.abs(X_np.reshape(size, 1, -1) - X_np.reshape(1, size, -1)), p),
                        axis=-1)
@@ -168,7 +168,7 @@ class TestPairwisePowDist(object):
     def test_pairwise_pow_dist_same_args_backward(self, X_Y_samples, p):
         X, Y, X_np, Y_np, mean, std = X_Y_samples
 
-        XX = kernels._pairwise_pow_dist(X, X, p=p)
+        XX = kernel._pairwise_pow_dist(X, X, p=p)
 
         XX.mean().backward()
         np.testing.assert_allclose(mean.grad.detach().cpu().numpy(), 0,
@@ -179,7 +179,7 @@ class TestKernelFunctions(object):
 
     def test_same_kernel_forward(self, X_Y_samples2):
         X, Y, X_np, Y_np, mean, std = X_Y_samples2
-        XY = kernels.same_kernel(X, Y, eps=0)
+        XY = kernel.same_kernel(X, Y, eps=0)
         px = X.detach().view(-1).sigmoid()
         py = Y.view(-1).sigmoid()
         XY_exp = T.log(T.ger(px, py) + T.ger(1 - px, 1 - py))
@@ -192,7 +192,7 @@ class TestKernelFunctions(object):
 
     def test_negdiff_kernel_forward(self, X_Y_samples2):
         X, Y, X_np, Y_np, mean, std = X_Y_samples2
-        XY = kernels.negdiff_kernel(X, Y, eps=0)
+        XY = kernel.negdiff_kernel(X, Y, eps=0)
         px = X.detach().view(-1).sigmoid()
         py = Y.view(-1).sigmoid()
         XY_exp = - T.log(T.ger(px, 1 - py) + T.ger(1 - px, py))
@@ -205,7 +205,7 @@ class TestKernelFunctions(object):
 
     def test_gaussian_kernel_forward(self, X_Y_samples2):
         X, Y, X_np, Y_np, mean, std = X_Y_samples2
-        XY = kernels.gaussian_kernel(X, Y)
+        XY = kernel.gaussian_kernel(X, Y)
         a = T.norm(X.detach().view(64, 1, -1) - Y.view(1, 64, -1), p=2, dim=-1) ** 2
         XY_exp = T.exp(- a / 2)
         T.testing.assert_allclose(XY, XY_exp,
@@ -217,7 +217,7 @@ class TestKernelFunctions(object):
 
     def test_exp_kernel_forward(self, X_Y_samples2):
         X, Y, X_np, Y_np, mean, std = X_Y_samples2
-        XY = kernels.exp_kernel(X, Y)
+        XY = kernel.exp_kernel(X, Y)
         a = T.norm(X.detach().view(64, 1, -1) - Y.view(1, 64, -1), p=2, dim=-1)
         XY_exp = T.exp(- a)
         T.testing.assert_allclose(XY, XY_exp,
@@ -229,7 +229,7 @@ class TestKernelFunctions(object):
 
     def test_laplacian_kernel_forward(self, X_Y_samples2):
         X, Y, X_np, Y_np, mean, std = X_Y_samples2
-        XY = kernels.laplacian_kernel(X, Y)
+        XY = kernel.laplacian_kernel(X, Y)
         a = T.norm(X.detach().view(64, 1, -1) - Y.view(1, 64, -1), p=1, dim=-1)
         XY_exp = T.exp(- a)
         T.testing.assert_allclose(XY, XY_exp,
@@ -241,7 +241,7 @@ class TestKernelFunctions(object):
 
     def test_exp2_kernel_forward(self, X_Y_samples2):
         X, Y, X_np, Y_np, mean, std = X_Y_samples2
-        XY = kernels.exp2_kernel(X, Y)
+        XY = kernel.exp2_kernel(X, Y)
         a = T.sum(X.detach().view(64, 1, -1) * Y.view(1, 64, -1), dim=-1)
         XY_exp = T.exp(a)
         T.testing.assert_allclose(XY, XY_exp,
@@ -253,14 +253,14 @@ class TestKernelFunctions(object):
 
     def test_lin_kernel_forward(self, X_Y_samples2):
         X, Y, X_np, Y_np, mean, std = X_Y_samples2
-        XY = kernels.lin_kernel(X, Y)
+        XY = kernel.lin_kernel(X, Y)
         XY_exp = T.sum(X.detach().view(64, 1, -1) * Y.view(1, 64, -1), dim=-1)
         T.testing.assert_allclose(XY, XY_exp,
                                   rtol=1e-06, atol=1e-12)
 
     def test_normlin_kernel_forward(self, X_Y_samples2):
         X, Y, X_np, Y_np, mean, std = X_Y_samples2
-        XY = kernels.normlin_kernel(X, Y)
+        XY = kernel.normlin_kernel(X, Y)
         XY_exp = T.sum(X.detach().view(64, 1, -1) * Y.view(1, 64, -1), dim=-1)
         a = T.sqrt(X.detach().pow(2) + 1).view(64, 1)
         b = T.sqrt(Y.pow(2) + 1).view(1, 64)
@@ -273,7 +273,7 @@ class TestKernelFunctions(object):
 
     def test_normlin2_kernel_forward(self, X_Y_samples2):
         X, Y, X_np, Y_np, mean, std = X_Y_samples2
-        XY = kernels.normlin2_kernel(X, Y)
+        XY = kernel.normlin2_kernel(X, Y)
         a = T.sum(X.detach().view(64, 1, -1) * Y.view(1, 64, -1), dim=-1)
         b = T.sqrt(T.norm(X.detach().view(64, 1, -1) - Y.view(1, 64, -1), dim=-1)**2 + 1)
         XY_exp = a / b
@@ -286,7 +286,7 @@ class TestKernelFunctions(object):
 
     def test_poly_kernel_forward(self, X_Y_samples2):
         X, Y, X_np, Y_np, mean, std = X_Y_samples2
-        XY = kernels.poly_kernel(X, Y, a=2, c=1)
+        XY = kernel.poly_kernel(X, Y, a=2, c=1)
         a = T.sum(X.detach().view(64, 1, -1) * Y.view(1, 64, -1), dim=-1)
         XY_exp = (2 * a + 1) ** 2
         T.testing.assert_allclose(XY, XY_exp,
@@ -298,7 +298,7 @@ class TestKernelFunctions(object):
 
     def test_tanh_kernel_forward(self, X_Y_samples2):
         X, Y, X_np, Y_np, mean, std = X_Y_samples2
-        XY = kernels.tanh_kernel(X, Y)
+        XY = kernel.tanh_kernel(X, Y)
         a = T.sum(X.detach().view(64, 1, -1) * Y.view(1, 64, -1), dim=-1)
         XY_exp = T.tanh(a)
         T.testing.assert_allclose(XY, XY_exp,
@@ -310,7 +310,7 @@ class TestKernelFunctions(object):
 
     def test_imq_kernel_forward(self, X_Y_samples2):
         X, Y, X_np, Y_np, mean, std = X_Y_samples2
-        XY = kernels.imq_kernel(X, Y, sigma=2, d=4)
+        XY = kernel.imq_kernel(X, Y, sigma=2, d=4)
         a = T.norm(X.detach().view(64, 1, -1) - Y.view(1, 64, -1), dim=-1) ** 2
         XY_exp = (a / 4 + 1) ** -2
         T.testing.assert_allclose(XY, XY_exp, rtol=1e-06, atol=1e-12)
@@ -329,7 +329,7 @@ class TestKernelFunctions(object):
                                         "tanh_kernel"])
     def test_kernel_backward(self, X_Y_samples2, kernel):
         X, Y, X_np, Y_np, mean, std = X_Y_samples2
-        XY = kernels.exp2_kernel(X, Y)
+        XY = kernel.exp2_kernel(X, Y)
         XY.mean().backward()
         torch_assert_alltrue(mean.grad > 0)
 
@@ -338,12 +338,12 @@ class TestKernelWrapper(object):
 
     def test_default(self, X_Y_samples2):
         X, Y, X_np, Y_np, mean, std = X_Y_samples2
-        fn = kernels.cross_mean_kernel_wrap(kernels.gaussian_kernel)
+        fn = kernel.cross_mean_kernel_wrap(kernel.gaussian_kernel)
         XX, YY, XY = fn(X, Y, sigma=2)
 
-        XX_exp = kernels.gaussian_kernel(X, X, sigma=2)
-        YY_exp = kernels.gaussian_kernel(Y, Y, sigma=2)
-        XY_exp = kernels.gaussian_kernel(X, Y, sigma=2)
+        XX_exp = kernel.gaussian_kernel(X, X, sigma=2)
+        YY_exp = kernel.gaussian_kernel(Y, Y, sigma=2)
+        XY_exp = kernel.gaussian_kernel(X, Y, sigma=2)
 
         T.testing.assert_allclose(XX, XX_exp, rtol=1e-06, atol=1e-12)
         T.testing.assert_allclose(YY, YY_exp, rtol=1e-06, atol=1e-12)
@@ -351,12 +351,12 @@ class TestKernelWrapper(object):
 
     def test_no_try_pdist_calc_cxx(self, X_Y_samples2):
         X, Y, X_np, Y_np, mean, std = X_Y_samples2
-        fn = kernels.cross_mean_kernel_wrap(kernels.gaussian_kernel)
+        fn = kernel.cross_mean_kernel_wrap(kernel.gaussian_kernel)
         XX, YY, XY = fn(X, Y, try_pdist=False, calc_cxx=True, sigma=2)
 
-        XX_exp = kernels.gaussian_kernel(X, X, sigma=2)
-        YY_exp = kernels.gaussian_kernel(Y, Y, sigma=2)
-        XY_exp = kernels.gaussian_kernel(X, Y, sigma=2)
+        XX_exp = kernel.gaussian_kernel(X, X, sigma=2)
+        YY_exp = kernel.gaussian_kernel(Y, Y, sigma=2)
+        XY_exp = kernel.gaussian_kernel(X, Y, sigma=2)
 
         T.testing.assert_allclose(XX, XX_exp, rtol=1e-06, atol=1e-12)
         T.testing.assert_allclose(YY, YY_exp, rtol=1e-06, atol=1e-12)
@@ -364,11 +364,11 @@ class TestKernelWrapper(object):
 
     def test_no_try_pdist_no_calc_cxx(self, X_Y_samples2):
         X, Y, X_np, Y_np, mean, std = X_Y_samples2
-        fn = kernels.cross_mean_kernel_wrap(kernels.gaussian_kernel)
+        fn = kernel.cross_mean_kernel_wrap(kernel.gaussian_kernel)
         XX, YY, XY = fn(X, Y, try_pdist=False, calc_cxx=False, sigma=2)
 
-        YY_exp = kernels.gaussian_kernel(Y, Y, sigma=2)
-        XY_exp = kernels.gaussian_kernel(X, Y, sigma=2)
+        YY_exp = kernel.gaussian_kernel(Y, Y, sigma=2)
+        XY_exp = kernel.gaussian_kernel(X, Y, sigma=2)
 
         assert(XX is None)
         T.testing.assert_allclose(YY, YY_exp, rtol=1e-06, atol=1e-12)
@@ -376,12 +376,12 @@ class TestKernelWrapper(object):
 
     def test_try_pdist_calc_cxx(self, X_Y_samples2):
         X, Y, X_np, Y_np, mean, std = X_Y_samples2
-        fn = kernels.cross_mean_kernel_wrap(kernels.gaussian_kernel)
+        fn = kernel.cross_mean_kernel_wrap(kernel.gaussian_kernel)
         XX, YY, XY = fn(X, Y, try_pdist=True, calc_cxx=True, sigma=2)
 
-        XX_exp = kernels.gaussian_kernel(X, X, sigma=2)
-        YY_exp = kernels.gaussian_kernel(Y, Y, sigma=2)
-        XY_exp = kernels.gaussian_kernel(X, Y, sigma=2)
+        XX_exp = kernel.gaussian_kernel(X, X, sigma=2)
+        YY_exp = kernel.gaussian_kernel(Y, Y, sigma=2)
+        XY_exp = kernel.gaussian_kernel(X, Y, sigma=2)
 
         T.testing.assert_allclose(XX, XX_exp.mean(), rtol=1e-06, atol=1e-12)
         T.testing.assert_allclose(YY, YY_exp.mean(), rtol=1e-06, atol=1e-12)
@@ -389,11 +389,11 @@ class TestKernelWrapper(object):
 
     def test_try_pdist_no_calc_cxx(self, X_Y_samples2):
         X, Y, X_np, Y_np, mean, std = X_Y_samples2
-        fn = kernels.cross_mean_kernel_wrap(kernels.gaussian_kernel)
+        fn = kernel.cross_mean_kernel_wrap(kernel.gaussian_kernel)
         XX, YY, XY = fn(X, Y, try_pdist=True, calc_cxx=False, sigma=2)
 
-        YY_exp = kernels.gaussian_kernel(Y, Y, sigma=2)
-        XY_exp = kernels.gaussian_kernel(X, Y, sigma=2)
+        YY_exp = kernel.gaussian_kernel(Y, Y, sigma=2)
+        XY_exp = kernel.gaussian_kernel(X, Y, sigma=2)
 
         assert(XX is None)
         T.testing.assert_allclose(YY, YY_exp.mean(), rtol=1e-06, atol=1e-12)
@@ -403,7 +403,7 @@ class TestKernelWrapper(object):
     @pytest.mark.parametrize("calc_cxx", [True, False])
     def test_kernel_wrapper_backward(self, X_Y_samples2, try_pdist, calc_cxx):
         X, Y, X_np, Y_np, mean, std = X_Y_samples2
-        fn = kernels.cross_mean_kernel_wrap(kernels.gaussian_kernel)
+        fn = kernel.cross_mean_kernel_wrap(kernel.gaussian_kernel)
         XX, YY, XY = fn(Y, X, try_pdist=try_pdist, calc_cxx=calc_cxx, sigma=2)
         if XX is not None:
             res = XX.mean() + YY.mean() - 2 * XY.mean()

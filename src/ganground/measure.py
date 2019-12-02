@@ -22,9 +22,35 @@ __all__ = ['Measure', 'EmpiricalMeasure', 'InducedMeasure']
 
 class Measure(object, metaclass=ABCMeta):
 
+    def __init__(self, *args, **kwargs):
+        super(Measure, self).__init__(*args, **kwargs)
+        self.holding = False
+        self._held_samples = None
+
     @abstractmethod
-    def sample(self):
+    def sample_(self, **kwargs):
         pass
+
+    def sample(self, **kwargs):
+        if self.holding is False:
+            return self.sample_(**kwargs)
+
+        if self._held_samples is None:
+            self._held_samples = self.sample_(**kwargs)
+
+        return self._held_samples
+
+    def hold_samples(self, value=True):
+        class hold_context(object):
+            def __enter__(self_):
+                self.holding = value
+                return self_
+
+            def __exit__(self_, *exc):
+                self.holding = False
+                self._held_samples = None
+
+        return hold_context()
 
 
 #  class SourceMeasure(Measure):
@@ -37,7 +63,7 @@ class Measure(object, metaclass=ABCMeta):
 #          pass
 
 
-class EmpiricalMeasure(Trainable, Measure):
+class EmpiricalMeasure(Measure, Trainable):
     """Describe a structured `source` of entropy; a dataset."""
 
     def __init__(self, name: str, dataset: AbstractDataset, batch_size: int, split=0):
@@ -49,7 +75,7 @@ class EmpiricalMeasure(Trainable, Measure):
         self.split = split
         self.sampler = dataset.infinite_sampler(name, batch_size, split=split)
 
-    def sample(self):
+    def sample_(self, **kwargs):
         batch = next(self.sampler)
         if len(batch) == 1:
             return batch[0]
@@ -59,7 +85,7 @@ class EmpiricalMeasure(Trainable, Measure):
 # TODO what happens if multiple tensors in a batch? need for a marginal measure?
 
 
-class InducedMeasure(Trainable, Measure):
+class InducedMeasure(Measure, Trainable):
     """Describe the induced measure of a `source` through a measurable `model`."""
 
     def __init__(self, name: str, model: Module, *source, **opt_options):
@@ -69,7 +95,7 @@ class InducedMeasure(Trainable, Measure):
         assert(len(source) > 0)
         self.source = source
 
-    def sample(self, detach_source=False):
+    def sample_(self, detach_source=False, **kwargs):
         if detach_source is True:
             samples = [s.sample().detach() for s in self.source]
         else:

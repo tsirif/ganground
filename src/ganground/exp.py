@@ -142,6 +142,7 @@ class Experiment(nauka.exp.Experiment, ExperimentInterface):
         self.mkdirp(self.logdir)
         logger.info("Initializing experiment with name: {}".format(self.name))
 
+        # TODO move to State object
         self.tracking = None
         if args.tracking is not None:
             self.tracking = Wandb(args.tracking.key, args.tracking.entity,
@@ -216,6 +217,7 @@ class Experiment(nauka.exp.Experiment, ExperimentInterface):
                     salt="hyperparameters", rounds=100001)
         return binascii.hexlify(s).decode('utf-8', errors='strict')
 
+    # TODO summarize function
     def log(self, **kwargs):
         logger.debug("Logging (iter=%d): %s", self.iter, kwargs)
         if self.tracking:

@@ -94,8 +94,15 @@ class Factory(ABCMeta):
 
     def find_types(cls):
         cls.types = list(get_all_subclasses(cls.__base__))
+        exclude = set([kls.__name__
+                       for kls in cls.types
+                       if kls.__name__.startswith('_')])
+        exclude.add(cls.__name__)
+        if hasattr(cls, 'exclude'):
+            exclude |= set(cls.exclude)
         cls.types = {class_.__name__: class_
-                     for class_ in cls.types if class_.__name__ != cls.__name__}
+                     for class_ in cls.types
+                     if class_.__name__ not in exclude}
 
     def __call__(cls, of_type, *args, **kwargs):
         """Create an object, instance of ``cls.__base__``, on first call.

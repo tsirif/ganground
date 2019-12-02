@@ -59,11 +59,12 @@ laplacian_mix_kernel = cross_mean_kernel_wrap(LaplacianMix(), try_pdist=True)
 
 class Noise(gg.Measure):
     def __init__(self, name: str, *args, **kwargs):
+        super(Noise, self).__init__()
         self.name = name
         self.args = args
         self.kwargs = kwargs
 
-    def sample(self):
+    def sample_(self):
         return torch.randn(*self.args, **self.kwargs)
 
 
@@ -145,11 +146,21 @@ class GAN2D(gg.Experiment):
 
     @property
     def name(self):
-        default_name = "{:s}".format(self.args.obj_type)
+        default_name = "{:s}".format(self.args.dataset)
+        obj_type = dict()
+        obj_type.update(**vars(self.args.obj))
+        if self.args.reg:
+            obj_type.update(**vars(self.args.reg))
+        str_list = []
+        for n, c in obj_type.items():
+            if c == 1:
+                str_list.append(n)
+            else:
+                str_list.append('{}({:.4f})'.format(n, c))
+        default_name += "-{:s}".format('-'.join(str_list))
         giters, diters = self.g_d_iters
         if giters != diters or giters != 1:
             default_name += "({:d}-{:d})".format(diters, giters)
-        default_name += "-{:s}".format(self.args.dataset)
 
         default_name += '-d'
         default_name += self.args.d_opt.name
@@ -162,8 +173,6 @@ class GAN2D(gg.Experiment):
                                                             self.args.d_opt.beta2)
         if self.args.sn:
             default_name += "-SN"
-        #  if self.args.gp:
-        #      default_name += "-GP({:.3f})".format(self.args.gp)
 
         default_name += '-g'
         default_name += self.args.g_opt.name
@@ -233,13 +242,13 @@ class GAN2D(gg.Experiment):
             giters, diters = self.g_d_iters
             # Update Discriminator
             for _ in range(diters):
-                metric = self.metric.separate(self.args.obj_type,
+                metric = self.metric.separate(self.args.obj, self.args.reg,
                                               cp_to_neg=self.args.p2neg)
                 metric_summary.append(metric.unsqueeze(0))
 
             # Update Generator
             for _ in range(giters):
-                gval = self.metric.minimize(self.args.obj_type,
+                gval = self.metric.minimize(self.args.obj, self.args.reg,
                                             nonsat=self.args.nonsat,
                                             cp_to_neg=self.args.p2neg)
                 loss_summary.append(gval.unsqueeze(0))
@@ -414,14 +423,16 @@ class root(nauka.ap.Subcommand):
                                 help="Which nonlinearity function to apply to critic's activations.")
             modelp.add_argument("--no-critic-last-bias", '-nclb', action='store_true', default=False,
                                 help="Disable output layer's bias.")
-            modelp.add_argument("--obj-type", default='jsd', type=str,
-                                help="Type of advesarial objective function: " + str(gg.Objective.types.keys()))
+            modelp.add_argument("--obj", action=gg.metric.ObjectiveAction,
+                                default='jsd',
+                                help="Advesarial objective function.")
+            modelp.add_argument("--reg", action=gg.metric.ObjectiveAction,
+                                default=None,
+                                help="Regularizers used.")
             modelp.add_argument("--nonsat", action='store_true', default=False,
                                 help="Use non-saturating version for `--obj-type`, if available.")
             modelp.add_argument("--p2neg", action='store_true', default=False,
                                 help="Target distribution targets negative critic outputs.")
-            #  modelp.add_argument("--gp", default=None, type=float,
-            #                      help="Gradient norm penalty regularization constant.")
             modelp.add_argument("--sn", action='store_true', default=False,
                                 help="Enable spectral normalization in discr modules.")
 
