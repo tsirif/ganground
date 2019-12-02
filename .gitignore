@@ -105,3 +105,4 @@ venv.bak/
 
 # editor swap files
 *.swp
+work/

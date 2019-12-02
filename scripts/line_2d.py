@@ -190,7 +190,7 @@ class Line2D(gg.Experiment):
         self.Z = Noise('1d_g', self.args.batch_size, 1, device=self.device)
         self.g1 = Generator('gener1', self.args)
         self.Q = gg.InducedMeasure('model', self.g1, self.Z,
-                                   spec=None)
+                                   spec=self.args.g_opt, ema=self.args.g_ema)
 
         args_ = copy.deepcopy(self.args)
         args_.slope = 0
@@ -295,17 +295,17 @@ class Line2D(gg.Experiment):
         bot, top = Xspace[0], Xspace[-1]
         ax.imshow(disc_map, cmap=CMAP_DIVERGING,
                   vmin=0.45, vmax=0.55,
-                  alpha=0.5, interpolation='lanczos',
+                  alpha=0.4, interpolation='lanczos',
                   extent=(bot, top, bot, top), origin='lower')
-        CS = ax.contour(disc_map, cmap=CMAP_SEQUENTIAL, alpha=0.6,
+        CS = ax.contour(disc_map, cmap=CMAP_SEQUENTIAL, alpha=0.3,
                         extent=(bot, top, bot, top), origin='lower')
         ax.clabel(CS, inline=True, fmt='%.3f',
                   colors='black', fontsize=MEDIUM_SIZE)
 
-        ax.scatter(*target_dist.cpu().numpy().T, s=1,
+        ax.scatter(*target_dist.cpu().numpy().T, s=10,
                    marker='o', facecolors='none', edgecolors='blue')
-        ax.scatter(*samples.cpu().numpy().T, c='orange',
-                   s=1, marker='+')
+        ax.scatter(*samples.cpu().numpy().T, c='red',
+                   s=10, marker='+')
 
         msg = "Eval Metric (×1e3) <mean±std>: {:4.4f}±{:4.4f} | Update Steps: {}"
         mmd_mean = block_stats.mean() * 1e3
