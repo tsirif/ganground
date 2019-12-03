@@ -21,9 +21,10 @@ class SingletonError(ValueError):
     an object from a already-instantiated `SingletonType` class.
     """
 
-    def __init__(self):
+    def __init__(self, cls):
         """Pass the same constant message to ValueError underneath."""
-        super().__init__("A singleton instance has already been instantiated.")
+        msg = "A singleton instance of '{}' has already been instantiated."
+        super().__init__(msg.format(cls.__name__))
 
 
 class SingletonType(type):
@@ -39,7 +40,7 @@ class SingletonType(type):
         if cls.instance is None:
             cls.instance = super(SingletonType, cls).__call__(*args, **kwargs)
         elif args or kwargs:
-            raise SingletonError()
+            raise SingletonError(cls)
         return cls.instance
 
 

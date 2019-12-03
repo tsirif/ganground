@@ -18,6 +18,7 @@ import ganground as gg
 from ganground.metric.kernel import (mmd2, AbstractKernel,
                                      cross_mean_kernel_wrap,
                                      _pairwise_dist)
+from ganground.state import State
 
 logger = gg.logging.getLogger('GAN2D')
 
@@ -137,7 +138,12 @@ class Line2D(gg.Experiment):
 
     @property
     def name(self):
-        default_name = "{:s}".format(self.args.dataset)
+        default_name = ''
+        if self.args.nogen is True:
+            default_name += 'nogen'
+        else:
+            default_name += 'gen'
+        default_name += "-sl({:.3f})-y0({:.3f})".format(self.args.slope, self.args.y0)
         obj_type = dict()
         obj_type.update(**vars(self.args.obj))
         if self.args.reg:
@@ -165,17 +171,18 @@ class Line2D(gg.Experiment):
         if self.args.sn:
             default_name += "-SN"
 
-        default_name += '-g'
-        default_name += self.args.g_opt.name
-        if self.args.g_opt.name == 'sgd':
-            default_name += '({:.4f},{:.2f})'.format(self.args.g_opt.lr,
-                                                     self.args.g_opt.mom)
-        elif self.args.g_opt.name == 'adam':
-            default_name += '({:.4f},{:.2f},{:.2f})'.format(self.args.g_opt.lr,
-                                                            self.args.g_opt.beta1,
-                                                            self.args.g_opt.beta2)
-        if self.args.g_ema:
-            default_name += "-ema({:.3f})".format(self.args.g_ema)
+        if self.args.nogen is False:
+            default_name += '-g'
+            default_name += self.args.g_opt.name
+            if self.args.g_opt.name == 'sgd':
+                default_name += '({:.4f},{:.2f})'.format(self.args.g_opt.lr,
+                                                        self.args.g_opt.mom)
+            elif self.args.g_opt.name == 'adam':
+                default_name += '({:.4f},{:.2f},{:.2f})'.format(self.args.g_opt.lr,
+                                                                self.args.g_opt.beta1,
+                                                                self.args.g_opt.beta2)
+            if self.args.g_ema:
+                default_name += "-ema({:.3f})".format(self.args.g_ema)
 
         if not self.args.name:
             return "-".join([default_name, self.hash(10)])
@@ -196,8 +203,7 @@ class Line2D(gg.Experiment):
         args_.slope = 0
         args_.y0 = 0
         self.g2 = Generator('gener2', args_)
-        self.P = gg.InducedMeasure('target', self.g2, self.Z,
-                                   spec=None)
+        self.P = gg.InducedMeasure('target', self.g2, self.Z, spec=None)
 
         self.critic = Critic('critic', self.args)
         self.metric = gg.Metric('discr', self.P, self.Q, self.critic,
@@ -258,22 +264,30 @@ class Line2D(gg.Experiment):
         target_dist = []
         samples = []
         block_stats = []
-        for _ in range(10):
-            with torch.no_grad():
-                cx = self.P.sample()
-                cy = self.Q.sample()
-                while cy.size(0) < cx.size(0):
-                    cy = torch.cat([cy, self.Q.sample()])
-            cy = cy[:cx.size(0)]
+        block_stats2 = []
+        for _ in range(16):
+            with self.P.hold_samples(), self.Q.hold_samples():
+                with torch.no_grad():
+                    cx = self.P.sample()
+                    cy = self.Q.sample()
+                    #  while cy.size(0) < cx.size(0):
+                    #      cy = torch.cat([cy, self.Q.sample()])
+                #  cy = cy[:cx.size(0)]
+                assert(cx.size(0) == cy.size(0))
+                target_dist.append(cx)
+                samples.append(cy)
 
-            target_dist.append(cx)
-            samples.append(cy)
-            stat = mmd2(*laplacian_mix_kernel(cx, cy)).sqrt()
-            block_stats.append(stat.unsqueeze(-1))
+                stat = mmd2(*laplacian_mix_kernel(cx, cy)).sqrt()
+                block_stats.append(stat.unsqueeze(-1))
+
+                stat2 = self.metric.estimate(self.args.obj, cp_to_neg=self.args.p2neg)
+                block_stats2.append(stat2.unsqueeze(-1))
 
         target_dist = torch.cat(target_dist)
         samples = torch.cat(samples)
         block_stats = torch.cat(block_stats)
+        block_stats2 = torch.cat(block_stats2)
+        self.info.final_metric = block_stats2.mean()
 
         N_POINTS = 256
         RANGE = 3.
@@ -388,18 +402,18 @@ class root(nauka.ap.Subcommand):
                 "Optimization", "Tunables for the optimization procedure.")
 
             optp.add_argument("--d-opt", action=nauka.ap.Optimizer,
-                              default='adam:lr=0.0002,beta1=0,beta2=0.9',
+                              default='adam:lr=0.002,beta1=0,beta2=0.9',
                               help="Discriminator optimizer.")
             optp.add_argument("--g-opt", action=nauka.ap.Optimizer,
-                              default='adam:lr=0.0001,beta1=0,beta2=0.9',
+                              default='adam:lr=0.001,beta1=0,beta2=0.9',
                               help="Generator optimizer.")
             optp.add_argument("--g-ema", default=None, type=float,
                               help="Exponential moving average to update test generator with.")
 
-            taskp = argp.add_argument_group(
-                "Task", "Variations on the task to be solved.")
-            taskp.add_argument("--dataset", default="g8", type=str,
-                               help="Dataset Selection: " + str(tuple(gg.Dataset.types.keys())))
+            #  taskp = argp.add_argument_group(
+            #      "Task", "Variations on the task to be solved.")
+            #  taskp.add_argument("--dataset", default="g8", type=str,
+            #                     help="Dataset Selection: " + str(tuple(gg.Dataset.types.keys())))
 
             modelp = argp.add_argument_group(
                 "Architecture", "Tunables in Deep Neural Network architecture"
@@ -437,6 +451,62 @@ class root(nauka.ap.Subcommand):
             :param a: arguments of subcommand, ``train simple``
             """
             return Line2D(a).rollback().run().animate().exitcode
+
+        class optd(nauka.ap.Subcommand):
+            """Define ``optd`` subcommand."""
+
+            @classmethod
+            def addArgs(cls, argp):
+                argp.add_argument("--nps", default=21, type=int)
+
+            @classmethod
+            def run(cls, a):
+                """Execute ``train`` procedure.
+
+                :param a: arguments of subcommand, ``train simple``
+                """
+                a.train_period = a.train_iters
+                a.nogen = False
+                N_POINTS = int(a.nps)
+                del a.nps
+                RANGE = 2.
+                fig, ax = plt.subplots(figsize=(FIG_X_SIZE_IN, FIG_Y_SIZE_IN), dpi=DPI)
+                ax.set_xlim(-RANGE, RANGE)
+                ax.set_ylim(-RANGE, RANGE)
+
+                SlopeSpace = np.linspace(-RANGE, RANGE, N_POINTS)
+                Y0Space = np.linspace(-RANGE, RANGE, N_POINTS)
+                x, y = np.meshgrid(SlopeSpace, Y0Space)
+                points = np.concatenate(
+                    (x.reshape(len(SlopeSpace), len(SlopeSpace), 1),
+                     y.reshape(len(Y0Space), len(Y0Space), 1)), axis=2)
+                metric_map = np.zeros((N_POINTS, N_POINTS))
+                for x, row in enumerate(points):
+                    for y, (sl, y0) in enumerate(row):
+                        a_ = copy.deepcopy(a)
+                        a_.slope = sl
+                        a_.y0 = y0
+                        exp = Line2D(a_)
+                        metric_map[x][y] = exp.rollback().run().info.final_metric
+                        State.instance = None
+
+                bot, top = SlopeSpace[0], SlopeSpace[-1]
+                ax.imshow(metric_map, cmap=CMAP_SEQUENTIAL,
+                          #  vmin=0.45, vmax=0.55,
+                          alpha=0.5, interpolation='lanczos',
+                          extent=(bot, top, bot, top), origin='lower')
+                CS = ax.contour(metric_map, cmap=CMAP_SEQUENTIAL, alpha=1,
+                                extent=(bot, top, bot, top), origin='lower')
+                ax.clabel(CS, inline=True, fmt='%.3f',
+                          colors='black', fontsize=MEDIUM_SIZE)
+
+                objective = list(vars(a.obj).keys())[0]
+                plt.title("{}(P(slope=0,y0=0), P(slope=x,y0=y))".format(objective),
+                          loc='left')
+                image_path = os.path.join(os.path.curdir, objective + '.png')
+                bbox = Bbox.from_bounds(1.16, 1, 960 / DPI, 960 / DPI)
+                fig.savefig(image_path, bbox_inches=bbox)
+                plt.close(fig)
 
 
 def main(argv=sys.argv):
