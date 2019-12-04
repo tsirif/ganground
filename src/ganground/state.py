@@ -92,8 +92,9 @@ class State(object, metaclass=SingletonType):
             self._device = torch.device('cpu')
             logger.info("Using CPU")
 
+    # TODO Register torch tensor interface
     def register_module(self, module):
-        from ganground.nn import Module
+        from torch.nn import Module
         module_ = self._modules.get(module.name)
         if module_ is not None:
             if not isinstance(module_, Module):
@@ -104,17 +105,17 @@ class State(object, metaclass=SingletonType):
         self._modules[module.name] = module
         return module
 
-    def register_optimizer(self, trainable):
-        from ganground.optim import Trainable
-        optimizer_ = self._optimizers.get(trainable.name)
+    def register_optimizer(self, name, optimizer):
+        from torch.optim import Optimizer
+        optimizer_ = self._optimizers.get(name)
         if optimizer_ is not None:
-            if not isinstance(optimizer_, Trainable):
-                trainable.optimizer.load_state_dict(optimizer_)
+            if not isinstance(optimizer_, Optimizer):
+                optimizer.load_state_dict(optimizer_)
             else:
                 msg = "Trainable with name '{}' already registered in the State"
-                logger.warning(msg, trainable.name)
-        self._optimizers[trainable.name] = trainable.optimizer
-        return trainable.optimizer
+                logger.warning(msg, name)
+        self._optimizers[name] = optimizer
+        return optimizer
 
     def samplers(self, name: str):
         if name not in self._samplers:

@@ -19,6 +19,7 @@ import os
 import nauka
 
 
+from ganground.logging import getLogger
 from ganground.random import (PRNG, _pbkdf2)
 from ganground.state import State
 from ganground.tracking import Wandb
@@ -119,6 +120,18 @@ class ExperimentInterface(object, metaclass=ABCMeta):
 
 
 class Experiment(nauka.exp.Experiment, ExperimentInterface):
+    @classmethod
+    def project_workdir(cls, args):
+        if args.workdir:
+            return args.workdir
+        else:
+            return os.path.join(args.basedir, cls.__name__)
+
+    @classmethod
+    def project_logdir(cls, args):
+        pworkdir = cls.project_workdir(args)
+        return os.path.join(pworkdir, "logs")
+
     def __init__(self, args):
         """Initialize Experiment.
 
@@ -133,14 +146,11 @@ class Experiment(nauka.exp.Experiment, ExperimentInterface):
         # This is the time where state is created!
         self.state = State(self.name, self.__class__.__name__,
                            args, self.hyperparams)
-        if args.workdir:
-            super(Experiment, self).__init__(args.workdir)
-        else:
-            super(Experiment, self).__init__(os.path.join(args.basedir,
-                                                          self.__class__.__name__,
-                                                          self.name))
+        workdir = os.path.join(self.project_workdir(args), self.name)
+        super(Experiment, self).__init__(workdir)
         self.mkdirp(self.logdir)
         logger.info("Initializing experiment with name: {}".format(self.name))
+        self.logging = getLogger(self.__class__.__name__)
 
         # TODO move to State object
         self.tracking = None
@@ -219,7 +229,7 @@ class Experiment(nauka.exp.Experiment, ExperimentInterface):
 
     # TODO summarize function
     def log(self, **kwargs):
-        logger.debug("Logging (iter=%d): %s", self.iter, kwargs)
+        self.logging.debug("Iter=%d: %s", self.iter, kwargs)
         if self.tracking:
             self.tracking.log(kwargs, step=self.iter)
 

@@ -20,8 +20,6 @@ from ganground.metric.kernel import (mmd2, AbstractKernel,
                                      _pairwise_dist)
 from ganground.state import State
 
-logger = gg.logging.getLogger('GAN2D')
-
 
 # Plot settings
 SMALL_SIZE = 12
@@ -209,12 +207,10 @@ class Line2D(gg.Experiment):
         self.metric = gg.Metric('discr', self.P, self.Q, self.critic,
                                 spec=self.args.d_opt)
 
-        self.metric.eval()
-        self.Q.eval()
-        with gg.PRNG.reseed(self.args.eval_seed):
-            mmd_mean, mmd_std = self.visualize_samples()
-            self.log(**{'eval mmd mean (×1e3)': mmd_mean})
-            self.log(**{'eval mmd std (×1e3)': mmd_std})
+        if self.iter == 0:
+            self.info.final_metric = list()
+            with gg.PRNG.reseed(self.args.eval_seed):
+                self.eval(viz=True)
 
     def execute(self):
         # Training
@@ -244,23 +240,23 @@ class Line2D(gg.Experiment):
                                                 cp_to_neg=self.args.p2neg)
                     loss_summary.append(gval.unsqueeze(0))
 
-        self.log(metric=torch.cat(metric_summary).mean())
-        if self.args.nogen is False:
-            self.log(**{'generator loss': torch.cat(loss_summary).mean()})
+            self.log(metric=torch.cat(metric_summary).mean())
+            if self.args.nogen is False:
+                self.log(**{'generator loss': torch.cat(loss_summary).mean()})
+                self.log(slope=self.g1.slope)
+                self.log(y0=self.g1.y0)
 
-        # Evaluation and Visualization
-        self.metric.eval()
-        self.Q.eval()
-        with gg.PRNG.reseed(self.args.eval_seed):
-            mmd_mean, mmd_std = self.visualize_samples()
-            self.log(**{'eval mmd mean (×1e3)': mmd_mean})
-            self.log(**{'eval mmd std (×1e3)': mmd_std})
+            with gg.PRNG.reseed(self.args.eval_seed):
+                self.eval(viz=self.iter % self.args.train_period == 0 or self.is_done)
 
-    def visualize_samples(self):
+    def eval(self, viz=False):
         """Generate samples from a given fixed set of noise vectors and
         visualize them in a 2D plot along with contours of the discriminator,
         the norm of its gradient, and the target empirical distribution.
         """
+        self.metric.eval()
+        self.Q.eval()
+
         target_dist = []
         samples = []
         block_stats = []
@@ -287,52 +283,62 @@ class Line2D(gg.Experiment):
         samples = torch.cat(samples)
         block_stats = torch.cat(block_stats)
         block_stats2 = torch.cat(block_stats2)
-        self.info.final_metric = block_stats2.mean()
 
-        N_POINTS = 256
-        RANGE = 3.
-
-        fig, ax = plt.subplots(figsize=(FIG_X_SIZE_IN, FIG_Y_SIZE_IN), dpi=DPI)
-        ax.set_xlim(-RANGE, RANGE)
-        ax.set_ylim(-RANGE, RANGE)
-
-        Xspace = np.linspace(-RANGE, RANGE, N_POINTS)
-        x, y = np.meshgrid(Xspace, Xspace)
-        points = np.concatenate((x.reshape(len(Xspace), len(Xspace), 1),
-                                y.reshape(len(Xspace), len(Xspace), 1)), axis=2)
-        points = torch.from_numpy(points).float()
-        if self.args.cuda:
-            points = points.cuda(device=self.device)
-        outs = self.critic(points)
-        disc_map = torch.sigmoid(outs).detach().cpu().numpy().squeeze()
-
-        bot, top = Xspace[0], Xspace[-1]
-        ax.imshow(disc_map, cmap=CMAP_DIVERGING,
-                  vmin=0.45, vmax=0.55,
-                  alpha=0.4, interpolation='lanczos',
-                  extent=(bot, top, bot, top), origin='lower')
-        CS = ax.contour(disc_map, cmap=CMAP_SEQUENTIAL, alpha=0.3,
-                        extent=(bot, top, bot, top), origin='lower')
-        ax.clabel(CS, inline=True, fmt='%.3f',
-                  colors='black', fontsize=MEDIUM_SIZE)
-
-        ax.scatter(*target_dist.cpu().numpy().T, s=10,
-                   marker='o', facecolors='none', edgecolors='blue')
-        ax.scatter(*samples.cpu().numpy().T, c='red',
-                   s=10, marker='+')
-
-        msg = "Eval Metric (×1e3) <mean±std>: {:4.4f}±{:4.4f} | Update Steps: {}"
         mmd_mean = block_stats.mean() * 1e3
         mmd_std = block_stats.std() * 1e3
-        msg = msg.format(mmd_mean, mmd_std, self.iter)
+        self.log(**{'eval mmd mean (×1e3)': mmd_mean})
+        self.log(**{'eval mmd std (×1e3)': mmd_std})
 
-        plt.title(msg, loc='left')
-        image_path = os.path.join(self.logdir, 'step-' + str(self.iter) + '.png')
-        bbox = Bbox.from_bounds(1.16, 1, 960 / DPI, 960 / DPI)
-        fig.savefig(image_path, bbox_inches=bbox)
-        self.log(viz=fig)
-        plt.close(fig)
-        return mmd_mean, mmd_std
+        metric_mean = block_stats2.mean()
+        self.info.final_metric.append(metric_mean)
+        metric_std = block_stats2.mean()
+        self.log(**{'eval metric mean': metric_mean})
+        self.log(**{'eval metric std': metric_std})
+
+        if viz is True:
+            N_POINTS = 256
+            RANGE = 3.
+
+            fig, ax = plt.subplots(figsize=(FIG_X_SIZE_IN, FIG_Y_SIZE_IN), dpi=DPI)
+            ax.set_xlim(-RANGE, RANGE)
+            ax.set_ylim(-RANGE, RANGE)
+
+            Xspace = np.linspace(-RANGE, RANGE, N_POINTS)
+            x, y = np.meshgrid(Xspace, Xspace)
+            points = np.concatenate((x.reshape(len(Xspace), len(Xspace), 1),
+                                    y.reshape(len(Xspace), len(Xspace), 1)), axis=2)
+            points = torch.from_numpy(points).float()
+            if self.args.cuda:
+                points = points.cuda(device=self.device)
+            outs = self.critic(points)
+            disc_map = torch.sigmoid(outs).detach().cpu().numpy().squeeze()
+
+            bot, top = Xspace[0], Xspace[-1]
+            ax.imshow(disc_map, cmap=CMAP_DIVERGING,
+                      vmin=0.45, vmax=0.55,
+                      alpha=0.4, interpolation='lanczos',
+                      extent=(bot, top, bot, top), origin='lower')
+            CS = ax.contour(disc_map, cmap=CMAP_SEQUENTIAL, alpha=0.3,
+                            extent=(bot, top, bot, top), origin='lower')
+            ax.clabel(CS, inline=True, fmt='%.3f',
+                      colors='black', fontsize=MEDIUM_SIZE)
+
+            ax.scatter(*target_dist.cpu().numpy().T, s=10,
+                       marker='o', facecolors='none', edgecolors='blue')
+            ax.scatter(*samples.cpu().numpy().T, c='red',
+                       s=10, marker='+')
+
+            msg = "Eval Metric (×1e3) <mean±std>: {:4.4f}±{:4.4f} | Update Steps: {}"
+            msg = msg.format(mmd_mean, mmd_std, self.iter)
+
+            plt.title(msg, loc='left')
+            image_path = os.path.join(self.logdir, 'step-' + str(self.iter) + '.png')
+            bbox = Bbox.from_bounds(1.16, 1, 960 / DPI, 960 / DPI)
+            fig.savefig(image_path, bbox_inches=bbox)
+            self.log(viz=fig)
+            plt.close(fig)
+
+        return self
 
     def animate(self):
         import imageio
@@ -387,11 +393,11 @@ class root(nauka.ap.Subcommand):
             argp.add_argument(
                 "-es", "--eval-seed", default='pi=3.14159', type=str,
                 help="Frozen seed for PRNGs during evaluation/visualization.")
-            argp.add_argument("--train-iters", "-it", default=10000, type=int,
+            argp.add_argument("--train-iters", "-it", default=100, type=int,
                               help="Number of generator iterations to train for")
             argp.add_argument("--discr-iters", default=1, type=int,
                               help="How many discriminator iterations per generator iteration.")
-            argp.add_argument("--train-period", default=100, type=int,
+            argp.add_argument("--train-period", default=10, type=int,
                               help="Period of training steps before evaluation and visualization.")
             argp.add_argument("--batch-size", "--bs", default=64, type=int,
                               help="Batch Size")
@@ -402,25 +408,20 @@ class root(nauka.ap.Subcommand):
                 "Optimization", "Tunables for the optimization procedure.")
 
             optp.add_argument("--d-opt", action=nauka.ap.Optimizer,
-                              default='adam:lr=0.002,beta1=0,beta2=0.9',
+                              default='adam:lr=0.01,beta1=0,beta2=0.9',
                               help="Discriminator optimizer.")
             optp.add_argument("--g-opt", action=nauka.ap.Optimizer,
-                              default='adam:lr=0.001,beta1=0,beta2=0.9',
+                              default='adam:lr=0.005,beta1=0,beta2=0.9',
                               help="Generator optimizer.")
             optp.add_argument("--g-ema", default=None, type=float,
                               help="Exponential moving average to update test generator with.")
-
-            #  taskp = argp.add_argument_group(
-            #      "Task", "Variations on the task to be solved.")
-            #  taskp.add_argument("--dataset", default="g8", type=str,
-            #                     help="Dataset Selection: " + str(tuple(gg.Dataset.types.keys())))
 
             modelp = argp.add_argument_group(
                 "Architecture", "Tunables in Deep Neural Network architecture"
                 " and training.")
             modelp.add_argument("--slope", default=(1/np.sqrt(2)), type=float,
                                 help="Slope of initial model support.")
-            modelp.add_argument("--y0", default=0, type=float,
+            modelp.add_argument("--y0", default=1., type=float,
                                 help="Intersection with y-axis of initial model support.")
             modelp.add_argument("--model-width", default=256, type=int,
                                 help="How many units per layer.")
@@ -457,7 +458,8 @@ class root(nauka.ap.Subcommand):
 
             @classmethod
             def addArgs(cls, argp):
-                argp.add_argument("--nps", default=21, type=int)
+                argp.add_argument("--nps", default=25, type=int)
+                argp.add_argument("--print-iter", '-piter', default=-1, type=int)
 
             @classmethod
             def run(cls, a):
@@ -465,14 +467,14 @@ class root(nauka.ap.Subcommand):
 
                 :param a: arguments of subcommand, ``train simple``
                 """
-                a.train_period = a.train_iters
                 a.nogen = False
                 N_POINTS = int(a.nps)
+                piter = int(a.print_iter)
+                iters = a.train_iters + 1 if not a.fastdebug else a.fastdebug + 1
+                piter = piter if piter >= 0 else piter + iters
                 del a.nps
+                del a.print_iter
                 RANGE = 2.
-                fig, ax = plt.subplots(figsize=(FIG_X_SIZE_IN, FIG_Y_SIZE_IN), dpi=DPI)
-                ax.set_xlim(-RANGE, RANGE)
-                ax.set_ylim(-RANGE, RANGE)
 
                 SlopeSpace = np.linspace(-RANGE, RANGE, N_POINTS)
                 Y0Space = np.linspace(-RANGE, RANGE, N_POINTS)
@@ -480,30 +482,42 @@ class root(nauka.ap.Subcommand):
                 points = np.concatenate(
                     (x.reshape(len(SlopeSpace), len(SlopeSpace), 1),
                      y.reshape(len(Y0Space), len(Y0Space), 1)), axis=2)
-                metric_map = np.zeros((N_POINTS, N_POINTS))
+                metric_map = np.zeros((N_POINTS, N_POINTS, iters))
                 for x, row in enumerate(points):
                     for y, (sl, y0) in enumerate(row):
-                        a_ = copy.deepcopy(a)
+                        try:
+                            a_ = copy.deepcopy(a)
+                        except:
+                            a_ = a
                         a_.slope = sl
                         a_.y0 = y0
                         exp = Line2D(a_)
-                        metric_map[x][y] = exp.rollback().run().info.final_metric
+                        metric_map[x, y, :] = np.asarray(exp.rollback().run().info.final_metric)
                         State.instance = None
 
+                fig, ax = plt.subplots(figsize=(FIG_X_SIZE_IN, FIG_Y_SIZE_IN), dpi=DPI)
+                ax.set_xlim(-RANGE, RANGE)
+                ax.set_ylim(-RANGE, RANGE)
                 bot, top = SlopeSpace[0], SlopeSpace[-1]
-                ax.imshow(metric_map, cmap=CMAP_SEQUENTIAL,
-                          #  vmin=0.45, vmax=0.55,
-                          alpha=0.5, interpolation='lanczos',
-                          extent=(bot, top, bot, top), origin='lower')
-                CS = ax.contour(metric_map, cmap=CMAP_SEQUENTIAL, alpha=1,
-                                extent=(bot, top, bot, top), origin='lower')
-                ax.clabel(CS, inline=True, fmt='%.3f',
-                          colors='black', fontsize=MEDIUM_SIZE)
+                selected_map = metric_map[:, :, piter]
+                bg = ax.imshow(selected_map, cmap=CMAP_SEQUENTIAL,
+                               #  vmin=0.45, vmax=0.55,
+                               alpha=0.5, interpolation='lanczos',
+                               extent=(bot, top, bot, top), origin='lower')
+                #  CS = ax.contour(selected_map, cmap=CMAP_SEQUENTIAL, alpha=1,
+                #                  extent=(bot, top, bot, top), origin='lower')
+                #  ax.clabel(CS, inline=True, fmt='%.3f',
+                #            colors='black', fontsize=MEDIUM_SIZE)
+                fig.colorbar(bg, ax=ax, format='%.3f',
+                             shrink=0.85, pad=0.02, aspect=40)
 
-                objective = list(vars(a.obj).keys())[0]
-                plt.title("{}(P(slope=0,y0=0), P(slope=x,y0=y))".format(objective),
-                          loc='left')
-                image_path = os.path.join(os.path.curdir, objective + '.png')
+                objective = "+".join(vars(a.obj).keys())  # TODO perhaps method
+                msg = "{}(P(slope=0,y0=0), P(slope=x,y0=y)) | Update Steps: {}"
+                plt.title(msg.format(objective, piter), loc='left')
+                pworkdir = Line2D.project_logdir(a)
+                Line2D.mkdirp(pworkdir)
+                image_path = os.path.join(pworkdir,
+                                          '{}_{}.png'.format(objective, piter))
                 bbox = Bbox.from_bounds(1.16, 1, 960 / DPI, 960 / DPI)
                 fig.savefig(image_path, bbox_inches=bbox)
                 plt.close(fig)

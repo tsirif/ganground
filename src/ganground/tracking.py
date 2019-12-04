@@ -25,7 +25,7 @@ class WandbAction(Action):
     def __init__(self, **kwargs):
         kwargs['dest'] = 'tracking'
         default = kwargs.get('default', '')
-        kwargs['default'] = Namespace(**self.parse_string(default))
+        kwargs['default'] = Namespace(**self.parse_string(default)) if default is not None else None
         kwargs['metavar'] = '(ENTITY(:KEY))|(None)'
         kwargs['nargs'] = None
         kwargs['type'] = str

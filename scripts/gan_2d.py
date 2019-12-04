@@ -18,8 +18,6 @@ from ganground.metric.kernel import (mmd2, AbstractKernel,
                                      cross_mean_kernel_wrap,
                                      _pairwise_dist)
 
-logger = gg.logging.getLogger('GAN2D')
-
 
 # Plot settings
 SMALL_SIZE = 12
@@ -219,12 +217,13 @@ class GAN2D(gg.Experiment):
         self.metric = gg.Metric('discr', self.P, self.Q, self.critic,
                                 spec=self.args.d_opt)
 
-        self.metric.eval()
-        self.Q.eval()
-        with gg.PRNG.reseed(self.args.eval_seed):
-            mmd_mean, mmd_std = self.visualize()
-            self.log(**{'eval mmd mean (×1e3)': mmd_mean})
-            self.log(**{'eval mmd std (×1e3)': mmd_std})
+        if self.iter == 0:
+            self.metric.eval()
+            self.Q.eval()
+            with gg.PRNG.reseed(self.args.eval_seed):
+                mmd_mean, mmd_std = self.visualize()
+                self.log(**{'eval mmd mean (×1e3)': mmd_mean})
+                self.log(**{'eval mmd std (×1e3)': mmd_std})
 
     def execute(self):
         # Training

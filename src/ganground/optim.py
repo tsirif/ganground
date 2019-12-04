@@ -86,7 +86,7 @@ class Trainable(object):
                      self.name, self._model.name)
         self.optimizer = build_optimizer(self._model.parameters(),
                                          spec, **opt_options)
-        State().register_optimizer(self)
+        State().register_optimizer(self.name, self.optimizer)
         self.ema = None
         if ema:
             assert(1 > ema > 0)
