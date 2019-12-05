@@ -8,7 +8,7 @@ r"""
    :synopsis: Flexible wrapper of PyTorch which organizes boilerplate code.
 
 """
-from ganground._version_info import *
+from ganground._version import *
 
 from ganground import data
 from ganground.data import *

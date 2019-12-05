@@ -9,12 +9,12 @@ from setuptools import setup
 isfile = os.path.isfile
 pjoin = os.path.join
 repo_root = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, pjoin(repo_root, 'src'))
+sys.path.insert(0, pjoin(repo_root, 'src/ganground/_version'))
 
 print(sys.version)
 
 import versioneer  # noqa
-from ganground import _version_info as info  # noqa
+import _info as info  # noqa
 
 # Commenting out some requirements because it is better to leave the exact
 # installation process for those packages up to the user.
@@ -35,6 +35,7 @@ packages = [
     'ganground',
     'ganground.data',
     'ganground.metric',
+    'ganground._version',
     ]
 
 setup_args = dict(
