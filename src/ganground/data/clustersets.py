@@ -23,9 +23,6 @@ from ganground.data import AbstractDataset
 
 
 class _SmallDataset(AbstractDataset):
-    def __init__(self, *args, **kwargs):
-        super(_SmallDataset, self).__init__(*args, **kwargs)
-        self.root = os.path.join(self.root, self.__class__.__name__)
 
     def download(self, root):
         """

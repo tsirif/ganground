@@ -45,12 +45,13 @@ def prepare_splits(splits, N):
 
 class AbstractDataset(object, metaclass=ABCMeta):
 
-    def __init__(self, root, num_workers=1, download=False, load=True,
+    def __init__(self, root, num_threads=1, download=False, load=True,
                  splits=(1,), **options):
         self.state = State()
         self.root = os.path.join(os.path.expanduser(root))
-        assert(num_workers >= 0)
-        self.num_workers = num_workers
+        self.root = os.path.join(self.root, self.__class__.__name__)
+        assert(num_threads >= 0)
+        self.num_threads = num_threads
         self.splits = splits
         self.options = options
         self.n_epochs = 0
@@ -99,7 +100,7 @@ class AbstractDataset(object, metaclass=ABCMeta):
                                            batch_size=batch_size,
                                            sampler=sampler,
                                            #  drop_last=True,
-                                           num_workers=self.num_workers,
+                                           num_workers=self.num_threads,
                                            pin_memory=self.state.is_cuda,
                                            worker_init_fn=_worker_init_fn,
                                            )
