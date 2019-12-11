@@ -36,6 +36,7 @@ packages = [
     'ganground.data',
     'ganground.metric',
     'ganground._version',
+    'ganground.nn',
     ]
 
 setup_args = dict(

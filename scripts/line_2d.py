@@ -182,8 +182,6 @@ class Line2D(gg.Experiment):
             if self.args.g_ema:
                 default_name += "-ema({:.3f})".format(self.args.g_ema)
 
-        if not self.args.name:
-            return "-".join([default_name, self.hash(10)])
         return "-".join([default_name] + self.args.name + [self.hash(10)])
 
     @property
@@ -243,8 +241,8 @@ class Line2D(gg.Experiment):
             self.log(metric=torch.cat(metric_summary).mean())
             if self.args.nogen is False:
                 self.log(**{'generator loss': torch.cat(loss_summary).mean()})
-                self.log(slope=self.g1.slope)
-                self.log(y0=self.g1.y0)
+                self.log(slope=self.g1.slope.data.clone().detach())
+                self.log(y0=self.g1.y0.data.clone().detach())
 
             with gg.PRNG.reseed(self.args.eval_seed):
                 self.eval(viz=self.iter % self.args.train_period == 0 or self.is_done)
@@ -468,6 +466,7 @@ class root(nauka.ap.Subcommand):
                 :param a: arguments of subcommand, ``train simple``
                 """
                 a.nogen = False
+                a.name.append('optd')
                 N_POINTS = int(a.nps)
                 piter = int(a.print_iter)
                 iters = a.train_iters + 1 if not a.fastdebug else a.fastdebug + 1

@@ -51,7 +51,7 @@ class Metric(Trainable):
         cQ = InducedMeasure('critic#Q', self.critic, self.Q)
         obj = ObjectiveBuilder(**vars(obj_spec))
         logger.debug("Estimating (training=%s) metric '%s' with '%s'",
-                     self.training, self.name, obj)
+                     self.training, self.name, obj_spec)
         return obj.estimate_metric(cP.sample(detach_source=True),
                                    cQ.sample(detach_source=True),
                                    **obj_kwargs)
@@ -61,7 +61,7 @@ class Metric(Trainable):
         cQ = InducedMeasure('critic#Q', self.critic, self.Q)
         obj = ObjectiveBuilder(**vars(obj_spec))
         logger.debug("Loss (training=%s) from metric '%s' with '%s'",
-                     self.training, self.name, obj)
+                     self.training, self.name, obj_spec)
         return obj.estimate_measure_loss(cP.sample(), cQ.sample(),
                                          **obj_kwargs)
 

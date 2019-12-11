@@ -8,9 +8,10 @@ r"""
    :synopsis: Define software abstractions for probability measures.
 
 """
+from abc import (ABCMeta, abstractmethod)
 import logging
 
-from abc import (ABCMeta, abstractmethod)
+import torch
 
 from ganground.data import AbstractDataset
 from ganground.optim import Trainable
@@ -66,14 +67,16 @@ class Measure(object, metaclass=ABCMeta):
 class EmpiricalMeasure(Measure, Trainable):
     """Describe a structured `source` of entropy; a dataset."""
 
-    def __init__(self, name: str, dataset: AbstractDataset, batch_size: int, split=0):
+    def __init__(self, name: str, dataset: AbstractDataset, batch_size: int,
+                 split=0, resume=True):
         super(EmpiricalMeasure, self).__init__(name, None)
         logger.debug("Create empirical measure '%s' from dataset '%s:%d' (bs=%d)",
                      name, dataset.__class__.__name__, split, batch_size)
         self.dataset = dataset
         self.batch_size = batch_size
         self.split = split
-        self.sampler = dataset.infinite_sampler(name, batch_size, split=split)
+        self.sampler = dataset.infinite_sampler(name, batch_size,
+                                                split=split, resume=resume)
 
     def sample_(self, **kwargs):
         batch = next(self.sampler)
@@ -96,10 +99,15 @@ class InducedMeasure(Measure, Trainable):
         self.source = source
 
     def sample_(self, detach_source=False, **kwargs):
+        samples_ = [s.sample() for s in self.source]
+        samples = list()
+        for x in samples_:
+            if torch.is_tensor(x):
+                samples.append(x)
+            else:
+                samples.extend(x)
         if detach_source is True:
-            samples = [s.sample().detach() for s in self.source]
-        else:
-            samples = [s.sample() for s in self.source]
+            samples = [s.detach() for s in samples]
         if self.model is None:
             if len(samples) == 1:
                 return samples[0]

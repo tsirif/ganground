@@ -8,9 +8,9 @@ r"""
    :synopsis: Integrates image datasets from torchvision
 
 """
+import torch
 import torchvision
 from torchvision import transforms as tform
-from torchvision.transforms import functional as F
 
 from ganground.data import AbstractDataset
 
@@ -28,6 +28,9 @@ class _Torchvision(AbstractDataset):
         dclass = self._get_data_class()
         dclass(root, download=True)
 
+    def check_exists(self, root):
+        return None  # Delegate to torchvision object
+
     def prepare(self, root, train=True,
                 transform=None, target_transform=None, **options):
         dclass = self._get_data_class()
@@ -42,8 +45,11 @@ class _Torchvision(AbstractDataset):
 
     def transform(self, batch):
         # Scale [0, +1] to [-1, +1]
-        batch = F.normalize(mean=(0.5, 0.5, 0.5),
-                            std=(0.5, 0.5, 0.5), inplace=True)
+        sample = batch[0]
+        dtype = sample.dtype
+        mean = torch.as_tensor((0.5, 0.5, 0.5), dtype=dtype, device=sample.device)
+        std = torch.as_tensor((0.5, 0.5, 0.5), dtype=dtype, device=sample.device)
+        sample.sub_(mean[None, :, None, None]).div_(std[None, :, None, None])
         return batch
 
 

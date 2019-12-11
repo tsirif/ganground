@@ -56,7 +56,7 @@ class AbstractDataset(object, metaclass=ABCMeta):
         self.options = options
         self.n_epochs = 0
 
-        if download is True and self.check_exists(self.root) is False:
+        if download is True and self.check_exists(self.root) is not True:
             self.download(self.root)
 
         self._data = []
@@ -84,8 +84,12 @@ class AbstractDataset(object, metaclass=ABCMeta):
             raise ValueError("Call `load` method first.")
         return self._data
 
+    @property
+    def N(self):
+        return self.n_data
+
     def load(self):
-        if not self.check_exists(self.root):
+        if self.check_exists(self.root) is False:
             raise RuntimeError(self.__class__.__name__ + ' not found.' +
                                ' You can use download=True to download it')
         self._data = self.prepare(self.root, **self.options)
@@ -115,11 +119,15 @@ class AbstractDataset(object, metaclass=ABCMeta):
             batch = self.transform(batch)
         return batch
 
-    def infinite_sampler(self, name: str, batch_size: int, split=0):
+    def infinite_sampler(self, name: str, batch_size: int, split=0,
+                         resume=True):
         fetch_stream = None
         if self.state.is_cuda:
             fetch_stream = torch.cuda.Stream()
-        batches_seen = self.state.samplers(name)  # TODO
+        if resume is True:
+            batches_seen = self.state.samplers(name)
+        else:
+            batches_seen = 0
         sampler = MultiEpochSampler(self.data[split],
                                     batches_seen,
                                     batch_size)
@@ -133,7 +141,8 @@ class AbstractDataset(object, metaclass=ABCMeta):
                 for x in current_batch:
                     x.record_stream(torch.cuda.current_stream())
             next_batch = self._fetch(loader, fetch_stream)
-            self.state._samplers[name] += 1  # TODO
+            if resume:
+                self.state._samplers[name] += 1  # TODO FIXME
             yield current_batch
 
 
