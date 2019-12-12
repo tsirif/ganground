@@ -175,8 +175,6 @@ class Dirac1D(gg.Experiment):
 
     def execute(self):
         # Training
-        sys.stdout.write("{}/{}\r".format(self.iter + 1, self.args.train_iters))
-        sys.stdout.flush()
         self.iter += 1
 
         giters, diters = self.g_d_iters

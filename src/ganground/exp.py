@@ -15,6 +15,7 @@ import copy
 import json
 import logging
 import os
+import sys
 
 import nauka
 
@@ -192,6 +193,12 @@ class Experiment(nauka.exp.Experiment, ExperimentInterface):
     @iter.setter
     def iter(self, iter_):
         self.state.info.iter = iter_
+        # TODO Substitute with progress bar
+        sys.stdout.write("{}/{}\r".format(self.iter, self.args.train_iters))
+        sys.stdout.flush()
+        self.logging.debug("=========  Iter: %d/%d  ===========",
+                           self.iter, self.args.train_iters)
+
 
     @property
     def inter(self):

@@ -217,8 +217,6 @@ class Line2D(gg.Experiment):
         metric_summary = []
         loss_summary = []
         for _ in range(self.args.train_period):
-            sys.stdout.write("{}/{}\r".format(self.iter + 1, self.args.train_iters))
-            sys.stdout.flush()
             if self.is_done:
                 break
             self.iter += 1

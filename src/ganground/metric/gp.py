@@ -16,13 +16,22 @@ from ganground.metric import AbstractObjective
 from ganground.utils import AbstractSingletonType
 
 
+def _get_x_y(inps):
+    if isinstance(inps, (list, tuple)):
+        x, y = inps
+    else:
+        x, y = inps, None
+    return x, y
+
+
 def get_gradient_wrt(critic, inps):
-    inps = inps.detach().requires_grad_()
+    x, y = _get_x_y(inps)
+    x = x.detach().requires_grad_()
     with torch.set_grad_enabled(True):
-        outs = critic(inps)
+        outs = critic(x, y)
     gradient = autograd.grad(
         outputs=outs,
-        inputs=inps,
+        inputs=x,
         grad_outputs=torch.ones_like(outs),
         create_graph=True, retain_graph=True, only_inputs=True)[0]
     return gradient, outs
@@ -65,15 +74,20 @@ class Roth(_GradientPenalty):
 
 
 class OGP(_GradientPenalty):
+    # This assumes that p and q have been generated using the same conditional
+    # information
 
     def __init__(self):
         self.uniform = torch.distributions.Uniform(0, 1)
 
     def estimate_metric(self, p, q, critic):
-        bs = p.size(0)
-        size = p.size()
+        px, py = _get_x_y(p)
+        qx, qy = _get_x_y(q)
+        bs = px.size(0)
+        size = px.size()
         epsilon = self.uniform.sample((bs, 1))
-        inter = p.view(bs, -1) * epsilon + q.view(bs, -1) * (1 - epsilon)
-        gradient, _ = get_gradient_wrt(critic, inter.view(*size))
+        inter = px.view(bs, -1) * epsilon + qx.view(bs, -1) * (1 - epsilon)
+        # Interpolate labels as well ??
+        gradient, _ = get_gradient_wrt(critic, (inter.view(*size), py))
         penalty = gradient.view(gradient.size(0), -1).norm(p=2, dim=-1).sub(1).pow(2).mean()
         return - penalty
