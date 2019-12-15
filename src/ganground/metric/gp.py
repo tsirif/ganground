@@ -13,6 +13,7 @@ import torch
 from torch import autograd
 
 from ganground.metric import AbstractObjective
+from ganground.state import State
 from ganground.utils import AbstractSingletonType
 
 
@@ -77,15 +78,12 @@ class OGP(_GradientPenalty):
     # This assumes that p and q have been generated using the same conditional
     # information
 
-    def __init__(self):
-        self.uniform = torch.distributions.Uniform(0, 1)
-
     def estimate_metric(self, p, q, critic):
         px, py = _get_x_y(p)
         qx, qy = _get_x_y(q)
         bs = px.size(0)
         size = px.size()
-        epsilon = self.uniform.sample((bs, 1))
+        epsilon = torch.rand(bs, 1, device=State().device)
         inter = px.view(bs, -1) * epsilon + qx.view(bs, -1) * (1 - epsilon)
         # Interpolate labels as well ??
         gradient, _ = get_gradient_wrt(critic, (inter.view(*size), py))

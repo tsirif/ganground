@@ -99,19 +99,13 @@ class Denoise(gg.Experiment):
                 (self.args.fastdebug and self.iter >= self.args.fastdebug))
 
     def define(self):
-        # Load a training dataset and bootstrap 8/10 size
-        self.d1 = gg.Dataset(self.args.dataset, self.datadir,
-                             splits=(8, 2),
-                             train=True)
-        self.P = gg.EmpiricalMeasure('clean', self.d1,
+        self.d = gg.Dataset(self.args.dataset, self.datadir,
+                            splits=(5, 5),
+                            train=True)
+        self.P = gg.EmpiricalMeasure('clean', self.d,
                                      self.args.batch_size, split=0)
-
-        # Load a training dataset and bootstrap 8/10 size (second time)
-        self.d2 = gg.Dataset(self.args.dataset, self.datadir,
-                             splits=(8, 2),
-                             train=True)
-        self.P2 = gg.EmpiricalMeasure('clean2', self.d2,
-                                      self.args.batch_size, split=0)
+        self.P2 = gg.EmpiricalMeasure('clean2', self.d,
+                                      self.args.batch_size, split=1)
         self.distortion = NoisyTarget('gaussian_blur', self.args)
         self.noisy_P = gg.InducedMeasure('blurred', self.distortion, self.P2,
                                          spec=self.args.g_opt, ema=self.args.g_ema)
@@ -120,10 +114,10 @@ class Denoise(gg.Experiment):
         self.d_test = gg.Dataset(self.args.dataset, self.datadir, train=False)
 
         # Determine sample shape (C x H x W)
-        sample, label = self.d1.data[0][0]
+        sample, label = self.d.data[0][0]
         self.d_shape = tuple(sample.size())
         self.logging.debug('sample shape is: %s', self.d_shape)
-        self.logging.debug('dataset size is: %d', self.d1.N)
+        self.logging.debug('dataset size is: %d', self.d.N)
         assert(self.d_shape[1] == self.d_shape[2])  # H == W
         # Calculate minimum number of downsampling steps until 4 x 4
         log_x_shape_f, log_x_shape_i = math.modf(math.log(self.d_shape[1], 2))
@@ -147,6 +141,8 @@ class Denoise(gg.Experiment):
 
         if self.iter == 0:
             self.info.sigma_summary = torch.tensor([])
+            self.info.metric_summary = torch.tensor([])
+            self.info.loss_summary = torch.tensor([])
             self.eval()
 
     def execute(self):
@@ -165,21 +161,30 @@ class Denoise(gg.Experiment):
             for _ in range(diters):
                 metric = self.metric.separate(self.args.obj, self.args.reg,
                                               cp_to_neg=self.args.p2neg)
-                metric_summary.append(metric.unsqueeze(0))
+
+            metric_summary.append(metric.unsqueeze(0))
 
             # Update Generator
             for _ in range(giters):
                 gval = self.metric.minimize(self.args.obj, self.args.reg,
                                             nonsat=self.args.nonsat,
                                             cp_to_neg=self.args.p2neg)
-                loss_summary.append(gval.unsqueeze(0))
-                sigma_summary.append(self.distortion.sigma.data.detach().clone().unsqueeze(0))
+                sigma = self.distortion.sigma.data.detach().clone().unsqueeze(0)
+
+            loss_summary.append(gval.unsqueeze(0))
+            sigma_summary.append(sigma)
+            self.log(sigma=sigma)
 
         self.info.sigma_summary = torch.cat((self.info.sigma_summary,
                                              torch.cat(sigma_summary).cpu()))
-        self.log(metric=torch.cat(metric_summary).mean(),
-                 gener_loss=torch.cat(loss_summary).mean(),
-                 sigma=self.info.sigma_summary[-1])
+        metric_summary = torch.cat(metric_summary)
+        self.info.metric_summary = torch.cat((self.info.metric_summary,
+                                              metric_summary.cpu()))
+        loss_summary = torch.cat(loss_summary)
+        self.info.loss_summary = torch.cat((self.info.loss_summary,
+                                            loss_summary.cpu()))
+        self.log(metric=metric_summary.mean(),
+                 gener_loss=loss_summary.mean())
         self.eval()
 
     def eval(self):
@@ -254,11 +259,11 @@ class root(nauka.ap.Subcommand):
             argp.add_argument(
                 "-es", "--eval-seed", default='pi=3.14159', type=str,
                 help="Frozen seed for PRNGs during evaluation/visualization.")
-            argp.add_argument("--train-iters", "-it", default=50000, type=int,
+            argp.add_argument("--train-iters", "-it", default=500, type=int,
                               help="Number of generator iterations to train for")
             argp.add_argument("--discr-iters", default=1, type=int,
                               help="How many discriminator iterations per generator iteration.")
-            argp.add_argument("--train-period", default=500, type=int,
+            argp.add_argument("--train-period", default=20, type=int,
                               help="Period of training steps before evaluation and visualization.")
             argp.add_argument("--batch-size", "--bs", default=64, type=int,
                               help="Batch Size")
