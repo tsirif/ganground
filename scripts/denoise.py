@@ -169,7 +169,7 @@ class Denoise(gg.Experiment):
                 gval = self.metric.minimize(self.args.obj, self.args.reg,
                                             nonsat=self.args.nonsat,
                                             cp_to_neg=self.args.p2neg)
-                sigma = self.distortion.sigma.data.detach().clone().unsqueeze(0)
+                sigma = self.distortion.sigma.data.detach().unsqueeze(0).cpu()
 
             loss_summary.append(gval.unsqueeze(0))
             sigma_summary.append(sigma)
