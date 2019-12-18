@@ -26,6 +26,7 @@ class Measure(object, metaclass=ABCMeta):
     def __init__(self, *args, **kwargs):
         super(Measure, self).__init__(*args, **kwargs)
         self.holding = False
+        self.detaching = False
         self._held_samples = None
 
     @abstractmethod
@@ -33,22 +34,28 @@ class Measure(object, metaclass=ABCMeta):
         pass
 
     def sample(self, **kwargs):
+        if self.holding is False or self._held_samples is None:
+            sam = self.sample_(**kwargs)
+            sam = sam.detach() if self.detaching else sam
+
         if self.holding is False:
-            return self.sample_(**kwargs)
+            return sam
 
         if self._held_samples is None:
-            self._held_samples = self.sample_(**kwargs)
+            self._held_samples = sam
 
         return self._held_samples
 
-    def hold_samples(self, value=True):
+    def hold_samples(self, value=True, detach=False):
         class hold_context(object):
             def __enter__(self_):
                 self.holding = value
+                self.detaching = detach
                 return self_
 
             def __exit__(self_, *exc):
                 self.holding = False
+                self.detaching = False
                 self._held_samples = None
 
         return hold_context()
@@ -93,8 +100,8 @@ class InducedMeasure(Measure, Trainable):
 
     def __init__(self, name: str, model: Module, *source, **opt_options):
         super(InducedMeasure, self).__init__(name, model, **opt_options)
-        logger.debug("Create induced measure '%s' from '%s#%s'",
-                     name, model.name, [s.name for s in source])
+        #  logger.debug("Create induced measure '%s' from '%s#%s'",
+        #               name, model.name, [s.name for s in source])
         assert(len(source) > 0)
         self.source = source
 

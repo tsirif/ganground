@@ -121,7 +121,7 @@ class Discriminator(gg.nn.Module):
         self.critic_output = Linear(DIM, 1, bias=(not args.no_critic_last_bias))
         self.finalize_init()
 
-    def forward(self, inputs):
+    def forward(self, inputs, *args):
         return self.critic_output(self.critic(inputs))
 
 

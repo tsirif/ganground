@@ -33,8 +33,8 @@ class Metric(Trainable):
         super(Metric, self).__init__(name, critic, **opt_options)
         self.P = P
         self.Q = Q
-        logger.debug("Create metric %s(P=%s,Q=%s) with critic '%s'",
-                     self.name, P.name, Q.name, critic.name if critic else None)
+        #  logger.debug("Create metric %s(P=%s,Q=%s) with critic '%s'",
+        #               self.name, P.name, Q.name, critic.name if critic else None)
 
 ################################################################################
 #                             Low level interface                              #
@@ -50,20 +50,17 @@ class Metric(Trainable):
         cP = InducedMeasure('critic#P', self.critic, self.P)
         cQ = InducedMeasure('critic#Q', self.critic, self.Q)
         obj = ObjectiveBuilder(**vars(obj_spec))
-        logger.debug("Estimating (training=%s) metric '%s' with '%s'",
-                     self.training, self.name, obj_spec)
-        return obj.estimate_metric(cP.sample(detach_source=True),
-                                   cQ.sample(detach_source=True),
-                                   **obj_kwargs)
+        #  logger.debug("Estimating (training=%s) metric '%s' with '%s'",
+        #               self.training, self.name, obj_spec)
+        return obj.estimate_metric(cP.sample(), cQ.sample(), **obj_kwargs)
 
     def loss(self, obj_spec, **obj_kwargs):
         cP = InducedMeasure('critic#P', self.critic, self.P)
         cQ = InducedMeasure('critic#Q', self.critic, self.Q)
         obj = ObjectiveBuilder(**vars(obj_spec))
-        logger.debug("Loss (training=%s) from metric '%s' with '%s'",
-                     self.training, self.name, obj_spec)
-        return obj.estimate_measure_loss(cP.sample(), cQ.sample(),
-                                         **obj_kwargs)
+        #  logger.debug("Loss (training=%s) from metric '%s' with '%s'",
+        #               self.training, self.name, obj_spec)
+        return obj.estimate_measure_loss(cP.sample(), cQ.sample(), **obj_kwargs)
 
 ################################################################################
 #                             High level interface                             #
